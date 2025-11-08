@@ -1,9 +1,9 @@
 import React, { useState } from 'react'
 import { Card, Table, Tag, Breadcrumb, Space, Button, Select, Input, message, Modal } from 'antd'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import http from '@/apis/http' // Đây là instance có interceptor
+import http from '@/apis/http'
 import orderAPI from '@/apis/order/order.api'
-import axios from 'axios' // 💥 BỔ SUNG: Import axios để gọi API không qua interceptor
+import axios from 'axios'
 import {
   DeleteOutlined,
   EditOutlined,
@@ -16,18 +16,18 @@ import {
 import OrderModalEdit from './modalEdit'
 import OrderModalDetail from './orderDetail'
 
-// 💥 LOGIC API AN TOÀN: BỎ QUA INTERCEPTOR LỖI ĐỂ NHẬN PHẢN HỒI THÔ 💥
+// LOGIC API AN TOÀN: BỎ QUA INTERCEPTOR LỖI ĐỂ NHẬN PHẢN HỒI THÔ
 const orderItemAPI = {
   getOrderItemDetails: async (orderId) => {
     try {
       const token = localStorage.getItem('token')
       const url = `${import.meta.env.VITE_API_URL || 'https://api-datn-orderfood-backend-2.onrender.com'}/order-item/order/${orderId}`
 
-      // ✅ GỌI AXIOS TRỰC TIẾP ĐỂ BỎ QUA INTERCEPTOR GÂY LỖI UNDEFINED
+      // GỌI AXIOS TRỰC TIẾP ĐỂ BỎ QUA INTERCEPTOR GÂY LỖI UNDEFINED
       const response = await axios.get(url, {
         headers: {
           'Content-Type': 'application/json',
-          Authorization: token ? `Bearer ${token}` : '', // Tự đính kèm token
+          Authorization: token ? `Bearer ${token}` : '',
         },
       })
 
@@ -42,7 +42,7 @@ const orderItemAPI = {
 }
 
 const { Option } = Select
-const { confirm } = Modal
+// const { confirm } = Modal // Đã xóa
 
 const OrderManagement = () => {
   const [statusSelected, setStatusSelected] = useState(null)
@@ -51,6 +51,10 @@ const OrderManagement = () => {
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [searchText, setSearchtext] = useState('')
   const [messageApi, contextHolder] = message.useMessage()
+
+  // ⭐ SỬA LỖI CONFIRM: SỬ DỤNG HOOK useModal
+  const [modalApi, modalContextHolder] = Modal.useModal()
+  const confirm = modalApi.confirm // Gán confirm từ hook
 
   // State để lưu ID đơn hàng cần xem chi tiết
   const [detailOrderId, setDetailOrderId] = useState(null)
@@ -116,14 +120,16 @@ const OrderManagement = () => {
 
   const { mutate: deleteOrder } = useMutation({
     mutationFn: async (id) => {
+      console.log(`[DELETE API] Đang gọi API DELETE cho ID: ${id}`);
       return await http.delete(`/orders/${id}`)
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       deleteSuccess()
+      console.log('✅ XÓA ĐƠN HÀNG THÀNH CÔNG:', data);
       queryClient.invalidateQueries({ queryKey: ['orders'] })
     },
     onError: (error) => {
-      console.error('Lỗi API DELETE Order:', error.response)
+      console.error('❌ LỖI API DELETE Order:', error.response);
 
       let errorMessage = 'Xóa đơn hàng thất bại.'
       if (error.response) {
@@ -227,8 +233,11 @@ const OrderManagement = () => {
                   okText: 'Xóa',
                   okType: 'danger',
                   cancelText: 'Hủy',
-                  onOk() {
-                    deleteOrder(record._id)
+                  // ⭐ SỬA LỖI: CHUYỂN onOk THÀNH HÀM ASYNC VÀ RETURN PROMISE
+                  onOk: async () => {
+                    console.log(`[DELETE CHECK] CHẮC CHẮN GỌI DELETE cho ID: ${record._id}`);
+                    // Trả về Promise để Modal chờ
+                    return deleteOrder(record._id);
                   },
                 })
               }}
@@ -258,7 +267,7 @@ const OrderManagement = () => {
 
   const tableData = Array.isArray(data) ? data : data?.data || []
 
-  // 💥 LOGIC LẤY MẢNG MÓN ĂN TỪ CÁC TRƯỜNG KHÁC NHAU (Đã sửa để thích nghi với phản hồi thô) 💥
+  // LOGIC LẤY MẢNG MÓN ĂN TỪ CÁC TRƯỜNG KHÁC NHAU 
   const orderItems =
     orderItemData && Array.isArray(orderItemData.data)
       ? orderItemData.data
@@ -271,6 +280,7 @@ const OrderManagement = () => {
   return (
     <div className="h-full overflow-auto">
       {contextHolder}
+      {modalContextHolder} {/* ⭐ THÊM MODAL CONTEXT HOLDER */}
       <section className="mb-3">
         <h1 className="font-bold text-3xl mb-2">Quản lý đơn hàng</h1>
         <Breadcrumb items={[{ title: 'Trang chủ' }, { title: 'Quản lý đơn hàng' }]} />
