@@ -1,118 +1,123 @@
-// src/pages/client/Home/components/ListProduct/index.jsx
-import http from '@/apis/http'
-import { useQuery } from '@tanstack/react-query'
-import React from 'react'
+import React, { useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { useMutation } from '@tanstack/react-query' // MỚI
+import { notification } from 'antd' // MỚI
+import http from '@/apis/http' // MỚI (Để kiểm tra)
+import tableAPI from '@/apis/table/table.api' // MỚI (Để cập nhật)
 
-// 1. NHẬN 'mongoTableId' (chuỗi dài) từ props
-const ListProduct = ({ mongoTableId }) => {
-  const {
-    data: Dishes = [],
-    isLoading,
-    error,
-  } = useQuery({
-    queryKey: ['dishes'],
-    queryFn: async () => {
-      // 2. SỬA LỖI LẤY MÓN ĂN:
-      const res = await http.get('/dishes')
-      console.log('API GET /dishes trả về:', res)
-      // Giả sử /dishes cũng trả về { success: true, data: [...] }
-      if (res && Array.isArray(res.data)) {
-        return res.data
-      }
-      return []
+import Categories from '@/layouts/DefaultLayout/components/Categories'
+import Features from '@/layouts/DefaultLayout/components/Features'
+import Hero from '@/layouts/DefaultLayout/components/Hero'
+import Products from '@/layouts/DefaultLayout/components/Products'
+
+const Home = () => {
+  const location = useLocation()
+  const navigate = useNavigate()
+
+  // === 1. (MỚI) ĐỊNH NGHĨA MUTATION ĐỂ CẬP NHẬT BÀN ===
+  const updateTableStatusMutation = useMutation({
+    // Dùng hàm 'update' từ file admin của bạn
+    mutationFn: ({ id, payload }) => tableAPI.update(id, payload), 
+    onSuccess: () => {
+      console.log('Cập nhật trạng thái bàn thành "occupied" thành công!')
+      notification.success({
+        message: 'Chào mừng!',
+        description: 'Đã nhận bàn. Bạn có thể bắt đầu gọi món.',
+        placement: 'topRight',
+      })
+    },
+    onError: (error) => {
+      console.error('Lỗi khi cập nhật trạng thái bàn:', error)
+      notification.error({
+        message: 'Không thể nhận bàn',
+        description: 'Bàn này có thể đang được bảo trì hoặc đã có người. Vui lòng liên hệ nhân viên.',
+        placement: 'topRight',
+      })
     },
   })
 
-  // 3. XÓA 'useParams' ở đây
-  // const { tableId } = useParams() // <-- XÓA
+  // === 2. (CẬP NHẬT) USE-EFFECT ĐỂ THÊM LOGIC MỚI ===
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search)
+    const tableIdFromUrl = searchParams.get('table_id')
 
-  const handleAddToCart = async (dish) => {
-    console.log('ĐÃ CLICK!', dish)
+    if (tableIdFromUrl) {
+      console.log('Đã phát hiện và lưu table_id:', tableIdFromUrl)
+      localStorage.setItem('currentTableId', tableIdFromUrl)
 
-    // 4. KIỂM TRA 'mongoTableId' (chuỗi dài)
-    if (!mongoTableId) {
-      console.error('LỖI: không nhận được mongoTableId từ OrderPage!')
-      return
-    }
+      // === 3. (MỚI) LOGIC KIỂM TRA VÀ CẬP NHẬT BÀN ===
+      const checkAndOccupyTable = async (id) => {
+        try {
+          // A. Gọi API để xem bàn này có "empty" không
+          // (Tôi giả định API này là GET /tables/:id)
+          const res = await http.get(`/tables/${id}`) 
+          const tableData = res.data // Lấy toàn bộ dữ liệu bàn
 
-    // === LẤY USER_ID (Code này ĐÚNG) ===
-    let userId = null
-    try {
-      const userString = localStorage.getItem('user')
-      if (!userString) {
-        alert('Lỗi: Không tìm thấy thông tin người dùng. Bạn đã đăng nhập chưa?')
-        return
+          if (tableData && tableData.status === 'empty') {
+            // B. Nếu "empty", gọi mutation để đổi thành "occupied"
+            console.log('Bàn đang trống. Cập nhật thành "occupied"...')
+
+            // Tạo payload đầy đủ để update (giống như file admin)
+            // Chúng ta gửi lại toàn bộ data cũ, chỉ đổi 'status'
+            const updatePayload = {
+              ...tableData,
+              status: 'occupied' // Đổi trạng thái
+            }
+            // Xóa _id, vì payload thường không chứa _id
+            delete updatePayload._id 
+
+            updateTableStatusMutation.mutate({
+              id: id,
+              payload: updatePayload,
+            })
+
+          } else {
+            // Bàn không trống (occupied, reserved, maintenance), không làm gì cả
+            console.log(`Bàn ở trạng thái: ${tableData.status}. Không cập nhật.`)
+            // Bạn có thể thêm thông báo nếu bàn đang 'maintenance' (bảo trì)
+            if (tableData.status === 'maintenance') {
+              notification.warn({
+                message: 'Bàn đang bảo trì',
+                description: 'Bàn này hiện không thể sử dụng. Vui lòng chọn bàn khác.',
+                placement: 'topRight'
+              })
+            }
+          }
+        } catch (error) {
+          console.error('Không thể lấy thông tin bàn:', error)
+          notification.error({
+            message: 'Lỗi quét bàn',
+            description: 'Không thể xác thực thông tin bàn. Vui lòng thử lại hoặc báo nhân viên.',
+            placement: 'topRight',
+          })
+        }
       }
-      const userData = JSON.parse(userString)
-      userId = userData._id
-      if (!userId) {
-        alert('Lỗi: ID người dùng không hợp lệ.')
-        return
-      }
-    } catch (e) {
-      alert('Có lỗi khi lấy thông tin user.')
-      return
-    }
-    // ======================================
 
-    // === TẠO PAYLOAD (SỬA LỖI 500) ===
-    const payload = {
-      table_id: mongoTableId, // <-- 5. Gửi _ID (chuỗi dài)
-      dish_id: dish._id,
-      quantity: 1,
-      user_id: userId,
-    }
-    // ====================================
+      // Gọi hàm kiểm tra
+      checkAndOccupyTable(tableIdFromUrl)
 
-    console.log('Chuẩn bị gọi API:', payload)
-    try {
-      const response = await http.post('/cart/add-item', payload)
-      console.log('API THÀNH CÔNG:', response)
-      alert(`Đã thêm "${dish.dish_name}" vào giỏ hàng!`)
-    } catch (err) {
-      console.error('LỖI API:', err)
-      alert('Có lỗi xảy ra, không thể thêm vào giỏ.')
+      // 4. Xóa ID khỏi URL (giữ nguyên)
+      searchParams.delete('table_id')
+      navigate(
+        {
+          pathname: location.pathname,
+          search: searchParams.toString(),
+        },
+        { replace: true }
+      )
     }
-  }
+    // Thêm mutation vào dependency array của useEffect
+  }, [location, navigate, updateTableStatusMutation]) 
 
-  if (isLoading) return <p>Loading...</p>
-  if (error) return <p>Error: {error.message}</p>
+  // (Phần return ... <Hero /> ... giữ nguyên)
   return (
-    <div className="">
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-        {Dishes.map((item) => (
-          <div
-            key={item._id}
-            className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 flex flex-col"
-          >
-            {/* ... (Phần JSX hiển thị ảnh, tên, giá... đã ĐÚNG) ... */}
-            <div className="relative w-full h-64 overflow-hidden">
-              <img
-                src={item.imageUrl}
-                className="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
-              />
-            </div>
-            <div className="flex-1 flex flex-col justify-between p-4">
-              <div>
-                <h3 className="text-base font-semibold text-gray-800 mb-1">{item.dish_name}</h3>
-                <p className="text-sm text-gray-500 mb-2">{item.description}</p>
-                <p className="text-lg font-bold text-red-500">
-                  {item.price.toLocaleString('vi-VN')} VND
-                </p>
-              </div>
-
-              <button
-                onClick={() => handleAddToCart(item)} // <-- 6. Nút này gọi hàm
-                className="mt-3 w-full bg-blue-500 text-white py-2 rounded-lg hover:bg-blue-600 transition-colors duration-300"
-              >
-                Thêm vào giỏooo
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
+    <>
+      <Hero />
+      <Features />
+      <Categories />
+      <Products />
+    </>
   )
 }
 
-export default ListProduct
+export default Home
