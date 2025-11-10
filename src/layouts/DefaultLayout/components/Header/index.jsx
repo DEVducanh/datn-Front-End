@@ -172,6 +172,17 @@ const Header = () => {
           <div className="hidden md:flex items-center gap-3">
             {/* NÚT GIỎ HÀNG */}
 
+            <Button
+              type="text"
+              className="flex! items-center! justify-center!"
+              onClick={() => navigate('/flareon/cart')} // <<< SỬA LẠI
+              aria-label="Giỏ hàng"
+            >
+              <Badge count={totalItemCount} size="small" offset={[0, 2]}>
+                <ShoppingCart className="w-5 h-5 text-gray-700 hover:text-orange-500" />
+              </Badge>
+            </Button>
+
             {/* Nút xem lịch sử đơn hàng (GIỮ NGUYÊN) */}
             <Button type="default" icon={<Clock />} onClick={() => setIsModalOpen(true)}>
               Lịch sử đơn hàng
@@ -182,11 +193,11 @@ const Header = () => {
               <UserDropdown /> // Hiển thị dropdown nếu đã đăng nhập
             ) : (
               <>
-                <AntButton onClick={() => navigate('/flareon/login')} type="primary">
+                <AntButton onClick={() => navigate('login')} type="primary">
                   Đăng nhập
                 </AntButton>{' '}
                 {/* <<< SỬA LẠI */}
-                <AntButton onClick={() => navigate('/flareon/register')}>Đăng ký</AntButton>{' '}
+                <AntButton onClick={() => navigate('register')}>Đăng ký</AntButton>{' '}
                 {/* <<< SỬA LẠI */}
               </>
             )}
@@ -282,7 +293,7 @@ const Header = () => {
                   <>
                     <AntButton
                       onClick={() => {
-                        navigate('/flareon/login')
+                        navigate('login')
                         setIsMenuOpen(false)
                       }}
                       type="primary"
@@ -292,7 +303,7 @@ const Header = () => {
                     {/* <<< SỬA LẠI */}
                     <AntButton
                       onClick={() => {
-                        navigate('/flareon/register')
+                        navigate('register')
                         setIsMenuOpen(false)
                       }}
                     >
@@ -329,6 +340,7 @@ const Header = () => {
                 {/* Dòng "id:" bị thừa đã được XÓA */}
                 <List.Item.Meta
                   title={<span className="font-semibold">{order.table}</span>}
+                  P
                   description={
                     <>
                       <ul className="list-disc pl-5">

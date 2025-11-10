@@ -25,13 +25,15 @@ const Register = () => {
         description: data.message || 'Vui lòng đăng nhập để tiếp tục.',
         placement: 'topRight',
       })
-      navigate('login')
+      
+      // === SỬA LỖI TẠI ĐÂY (ĐÃ CẬP NHẬT ĐƯỜNG DẪN ĐÚNG) ===
+      navigate('/flareon/login') 
+      // ===================================================
     },
 
     onError: (error) => {
       let displayMessage = 'Đăng ký thất bại. Lỗi không xác định.'
       if (error.response?.data?.message) {
-        // Xử lý lỗi validation từ MongoDB/Mongoose
         if (error.response.data.message.includes('validation failed')) {
           displayMessage = 'Lỗi thiếu thông tin bắt buộc: Tên đăng nhập hoặc Số điện thoại.'
         } else {
@@ -48,15 +50,13 @@ const Register = () => {
     },
   })
 
-  // Hàm xử lý sự kiện submit form (khi tất cả các trường hợp lệ)
+  // Hàm xử lý sự kiện submit form
   const onFinish = (values) => {
-    // ⚠️ ĐÃ CẬP NHẬT PAYLOAD ĐỂ BAO GỒM username VÀ phone
     const payload = {
-      // Backend có vẻ dùng `username`, không phải `name`
       username: values.username || values.name,
       email: values.email,
       password: values.password,
-      phone: values.phone, // THÊM TRƯỜNG PHONE
+      phone: values.phone, 
     }
     registerMutation.mutate(payload)
   }
@@ -64,8 +64,9 @@ const Register = () => {
   return (
     <div className="flex flex-col items-center justify-start min-h-screen bg-white">
       <header className="w-full flex justify-between items-center p-4">
+        {/* Sửa lại nút quay lại để trỏ về trang chủ /flareon */}
         <Link
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/flareon')} 
           className="flex items-center !text-lg !text-orange-500 !hover:text-orange-500 font-bold cursor-pointer"
         >
           <ArrowLeftOutlined className="mr-1" />
@@ -82,7 +83,7 @@ const Register = () => {
         </div>
 
         <Form form={form} layout="vertical" onFinish={onFinish}>
-          {/* Trường Tên (Sử dụng 'name' nhưng gửi 'username' trong payload) */}
+          {/* Trường Tên */}
           <Form.Item
             name="name"
             rules={[{ required: true, message: 'Vui lòng nhập Tên của bạn!' }]}
@@ -185,7 +186,8 @@ const Register = () => {
           <Button
             block
             size="large"
-            onClick={() => navigate('/login')}
+            // Sửa lại đường dẫn cho nút Đăng nhập
+            onClick={() => navigate('/flareon/login')} 
             className="!h-14 !rounded-lg !text-lg !font-semibold !bg-gray-100 !border-none hover:!bg-gray-200"
           >
             Đăng nhập

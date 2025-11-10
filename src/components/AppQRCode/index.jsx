@@ -1,66 +1,48 @@
-import React, { useRef, useCallback } from 'react'
-import { QRCodeCanvas } from 'qrcode.react'
-import { getTableLink } from '@/shared/utils/utils'
-import AntButton from '../AntButton'
+import React from 'react'
+import { QRCode, Typography, Tooltip } from 'antd'
 import { DownloadOutlined } from '@ant-design/icons'
 
-const AppQRCode = ({ tableId, tableName, size = 180 }) => {
-  const qrRef = useRef(null)
+const { Text, Title } = Typography
 
-  const handleDownload = useCallback(() => {
-    const qrCanvas = qrRef.current
-    if (!qrCanvas) return
+const AppQRCode = ({ tableId, tableName }) => {
+  // 1. Dùng IP từ terminal của bạn
+  const baseUrl = 'http://192.168.2.15:5173'
 
-    const padding = 20
-    const textHeight = 50
-    const totalHeight = size + textHeight + padding * 2
-    const totalWidth = size + padding * 2
+  // 2. Tạo URL đầy đủ cho QR code
+  const qrCodeUrl = `${baseUrl}/flareon?table_id=${tableId}`
 
-    const combinedCanvas = document.createElement('canvas')
-    combinedCanvas.width = totalWidth
-    combinedCanvas.height = totalHeight
+  // === DÒNG DEBUG: In URL ra console ===
+  console.log(`URL cho ${tableName}: ${qrCodeUrl}`)
+  // ===================================
 
-    const ctx = combinedCanvas.getContext('2d')
-    ctx.fillStyle = '#fff'
-    ctx.fillRect(0, 0, totalWidth, totalHeight)
-    ctx.drawImage(qrCanvas, padding, padding, size, size)
-    ctx.font = 'bold 20px sans-serif'
-    ctx.fillStyle = '#f97316'
-    ctx.textAlign = 'center'
-    ctx.fillText(tableName || '', totalWidth / 2, size + padding + 25)
-    ctx.font = '14px sans-serif'
-    ctx.fillStyle = '#4b5563'
-    ctx.fillText('Quét QR Code để gọi món', totalWidth / 2, size + padding + 45)
-
-    const dataUrl = combinedCanvas.toDataURL('image/png')
-    const a = document.createElement('a')
-    a.href = dataUrl
-    a.download = `${tableName || 'qr-table'}.png`
-    a.click()
-  }, [tableName, size])
+  // 3. Hàm để tải QR code
+  const downloadQRCode = () => {
+    const canvas = document.getElementById(`qr-code-${tableId}`)?.querySelector('canvas')
+    if (canvas) {
+      const url = canvas.toDataURL('image/png')
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `QR-Ban-${tableName}.png`
+      a.click()
+    }
+  }
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      <QRCodeCanvas
-        ref={qrRef}
-        value={getTableLink({ tableId, tableName })}
-        size={size}
-        bgColor="#ffffff"
-        fgColor="#000000"
-        level="H"
-        includeMargin
-      />
+    <div style={{ textAlign: 'center' }} id={`qr-code-${tableId}`}>
+      <QRCode value={qrCodeUrl} size={150} errorLevel="H" />
 
-      <span className="text-lg font-bold text-orange-400">{tableName}</span>
-      <span className="text-gray-600">Quét QR Code để gọi món</span>
-
-      <AntButton
-        onClick={handleDownload}
-        className="px-3 py-1.5 rounded-lg bg-blue-500 text-white hover:bg-blue-600"
-        icon={<DownloadOutlined />}
-      >
-        Tải xuống
-      </AntButton>
+      <Title level={5} style={{ marginTop: 8, marginBottom: 0 }}>
+        {tableName}
+      </Title>
+      <Text type="secondary" style={{ fontSize: 12 }}>
+        Quét QR Code để gọi món
+      </Text>
+      <br />
+      <Tooltip title="Tải xuống">
+        <a onClick={downloadQRCode} style={{ fontSize: 14, color: '#1890ff' }}>
+          <DownloadOutlined /> Tải xuống
+        </a>
+      </Tooltip>
     </div>
   )
 }
