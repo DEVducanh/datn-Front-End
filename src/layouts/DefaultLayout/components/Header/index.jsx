@@ -171,6 +171,7 @@ const Header = () => {
           {/* NÚT CHỨC NĂNG BÊN PHẢI (ĐÃ SỬA) */}
           <div className="hidden md:flex items-center gap-3">
             {/* NÚT GIỎ HÀNG */}
+
             <Button
               type="text"
               className="flex! items-center! justify-center!"
@@ -200,6 +201,17 @@ const Header = () => {
                 {/* <<< SỬA LẠI */}
               </>
             )}
+            {/* NÚT GIỎ HÀNG */}
+            <Button
+              type="text"
+              className="!flex !items-center !justify-center"
+              onClick={() => navigate('/flareon/cart')} // <<< SỬA LẠI
+              aria-label="Giỏ hàng"
+            >
+              <Badge count={totalItemCount} size="small" offset={[0, 2]}>
+                <ShoppingCart className="w-5 h-5 text-gray-700 hover:text-orange-500" />
+              </Badge>
+            </Button>
           </div>
 
           {/* NÚT MENU MOBILE (GIỮ NGUYÊN) */}
