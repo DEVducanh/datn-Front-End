@@ -27,6 +27,8 @@ import ReviewManagement from '@/pages/admin/ReviewManagement'
 import StaffManagement from '@/pages/admin/StaffManagement'
 import UserManagement from '@/pages/admin/UserManagement'
 import ContactPage from '@/pages/client/Contact/ContactPage'
+import VNPayTest from '../Checkout'
+import PaymentResult from '../PaymentResult'
 
 const AppRoutes = () => {
   return (
@@ -48,11 +50,12 @@ const AppRoutes = () => {
         </Route>
 
         <Route path="/flareon" element={<DefaultLayout />}>
-          <Route index element={<Home />} />
+          <Route index element={<VNPayTest />} />
           <Route path="about" element={<AboutPage />} />
           <Route path="category" element={<CategoryPage />} />
           <Route path="product/:id" element={<FoodDetailPage />} />
           <Route path="contact" element={<ContactPage />} />
+          <Route path="payment/result" element={<PaymentResult />} />
 
           <Route element={<ProtectedRoute />}>
             <Route path="cart" element={<CartPage />} />
