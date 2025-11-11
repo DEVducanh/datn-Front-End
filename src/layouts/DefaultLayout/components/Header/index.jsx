@@ -189,11 +189,11 @@ const Header = () => {
               <UserDropdown /> // Hiển thị dropdown nếu đã đăng nhập
             ) : (
               <>
-                <AntButton onClick={() => navigate('/flareon/login')} type="primary">
+                <AntButton onClick={() => navigate('login')} type="primary">
                   Đăng nhập
                 </AntButton>{' '}
                 {/* <<< SỬA LẠI */}
-                <AntButton onClick={() => navigate('/flareon/register')}>Đăng ký</AntButton>{' '}
+                <AntButton onClick={() => navigate('register')}>Đăng ký</AntButton>{' '}
                 {/* <<< SỬA LẠI */}
               </>
             )}
@@ -289,7 +289,7 @@ const Header = () => {
                   <>
                     <AntButton
                       onClick={() => {
-                        navigate('/flareon/login')
+                        navigate('login')
                         setIsMenuOpen(false)
                       }}
                       type="primary"
@@ -299,7 +299,7 @@ const Header = () => {
                     {/* <<< SỬA LẠI */}
                     <AntButton
                       onClick={() => {
-                        navigate('/flareon/register')
+                        navigate('register')
                         setIsMenuOpen(false)
                       }}
                     >
@@ -336,6 +336,7 @@ const Header = () => {
                 {/* Dòng "id:" bị thừa đã được XÓA */}
                 <List.Item.Meta
                   title={<span className="font-semibold">{order.table}</span>}
+                  P
                   description={
                     <>
                       <ul className="list-disc pl-5">

@@ -97,7 +97,7 @@ const CategoryPage = () => {
       const userString = localStorage.getItem('user')
       if (!token || !userString) {
         console.log('Truy cập trang đặt món nhưng chưa đăng nhập, chuyển đến /login')
-        navigate(`/login?redirect=${encodeURIComponent(location.pathname)}`)
+        navigate(`/flareon/login?redirect=${encodeURIComponent(location.pathname)}`)
       }
     }
   }, [qrCode, navigate, location.pathname]) // Chạy khi qrCode hoặc URL thay đổi
@@ -169,7 +169,9 @@ const CategoryPage = () => {
       console.error(`Lỗi khi thêm '${variables.dishName}' vào giỏ:`, err)
       if (err.response?.status === 401) {
         alert('Vui lòng đăng nhập để thêm sản phẩm.')
-        navigate(`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`)
+        navigate(
+          `/flareon/login?redirect=${encodeURIComponent(location.pathname + location.search)}`
+        )
       } else {
         const errMsg = err.response?.data?.message || 'Có lỗi xảy ra khi thêm vào giỏ.'
         alert(errMsg)
