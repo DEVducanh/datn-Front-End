@@ -13,7 +13,7 @@ import CategoryPage from '@/pages/client/CategoryPage'
 import CartPage from '@/pages/client/CartPage'
 import FoodDetailPage from '@/pages/client/FoodDetailPage'
 import OrderPage from '@/pages/client/OrderPage'
-import OrderDetailPage from '@/pages/client/OrderDetailPage'
+
 import Login from '@/pages/client/Login'
 import Register from '@/pages/client/Register'
 
@@ -27,8 +27,6 @@ import ReviewManagement from '@/pages/admin/ReviewManagement'
 import StaffManagement from '@/pages/admin/StaffManagement'
 import UserManagement from '@/pages/admin/UserManagement'
 import ContactPage from '@/pages/client/Contact/ContactPage'
-import VNPayTest from '../Checkout'
-import PaymentResult from '../PaymentResult'
 
 const AppRoutes = () => {
   return (
@@ -50,17 +48,16 @@ const AppRoutes = () => {
         </Route>
 
         <Route path="/flareon" element={<DefaultLayout />}>
-          <Route index element={<VNPayTest />} />
+          <Route index element={<Home />} />
           <Route path="about" element={<AboutPage />} />
           <Route path="category" element={<CategoryPage />} />
           <Route path="product/:id" element={<FoodDetailPage />} />
           <Route path="contact" element={<ContactPage />} />
-          <Route path="payment/result" element={<PaymentResult />} />
 
           <Route element={<ProtectedRoute />}>
             <Route path="cart" element={<CartPage />} />
             <Route path="orders" element={<OrderPage />} />
-            <Route path="order/:id" element={<OrderDetailPage />} />
+           
           </Route>
 
           <Route element={<AuthRedirect />}>
