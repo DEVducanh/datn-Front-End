@@ -27,12 +27,15 @@ const VNPayTest = () => {
     console.log('VnPay', paymentMethod)
 
     try {
-      const res = await axios.post('http://localhost:8080/payment/create-payment', {
-        amount: 172800,
-        invoicesId: '6912b1c242a13bcd9fced9e5',
-        language: 'vn',
-        bankCode: '',
-      })
+      const res = await axios.post(
+        'https://api-datn-orderfood-backend-2.onrender.com/payment/create-payment',
+        {
+          amount: 172800,
+          invoicesId: '6912b1c242a13bcd9fced9e5',
+          language: 'vn',
+          bankCode: '',
+        }
+      )
       console.log(res.data)
 
       if (res.data.paymentUrl) {
