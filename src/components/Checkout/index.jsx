@@ -28,8 +28,8 @@ const VNPayTest = () => {
 
     try {
       const res = await axios.post('http://localhost:8080/payment/create-payment', {
-        amount: totalAmount,
-        order_id: '68ff3f554ed7436458e9785d',
+        amount: 172800,
+        invoicesId: '6912b1c242a13bcd9fced9e5',
         language: 'vn',
         bankCode: '',
       })
