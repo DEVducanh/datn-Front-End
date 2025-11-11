@@ -27,6 +27,8 @@ import ReviewManagement from '@/pages/admin/ReviewManagement'
 import StaffManagement from '@/pages/admin/StaffManagement'
 import UserManagement from '@/pages/admin/UserManagement'
 import ContactPage from '@/pages/client/Contact/ContactPage'
+import Checkout from '@/pages/client/OrderPage/checkout'
+import PaymentResult from '../PaymentResult'
 
 const AppRoutes = () => {
   return (
@@ -53,11 +55,11 @@ const AppRoutes = () => {
           <Route path="category" element={<CategoryPage />} />
           <Route path="product/:id" element={<FoodDetailPage />} />
           <Route path="contact" element={<ContactPage />} />
+          <Route path="payment/result" element={<PaymentResult />} />
 
           <Route element={<ProtectedRoute />}>
             <Route path="cart" element={<CartPage />} />
-            <Route path="orders" element={<OrderPage />} />
-           
+            <Route path="orders" element={<Checkout />} />
           </Route>
 
           <Route element={<AuthRedirect />}>
