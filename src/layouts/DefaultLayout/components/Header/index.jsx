@@ -4,7 +4,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { FlameKindling, Menu, X, Clock, ShoppingCart, User, Receipt, LogOut } from 'lucide-react' // Import các icon cần thiết
 import { Modal, List, Button, Badge, Avatar, Dropdown } from 'antd' // Import các component Antd
 import AntButton from '@/components/AntButton'
-import { useQuery } from '@tanstack/react-query' // <<<--- DÒNG IMPORT ĐÃ THÊM
+import { useQuery } from '@tanstack/react-query'
 import http from '@/apis/http'
 import { UserOutlined } from '@ant-design/icons'
 import { useAuth } from '@/contexts/AuthContext'
@@ -88,7 +88,7 @@ const Header = () => {
     })
   }
 
-  // --- Cấu trúc menu dropdown cho user ---
+  // --- THAY ĐỔI 1: THÊM MỤC "LỊCH SỬ ĐƠN (MODAL)" VÀO MENU ---
   const userMenuItems = [
     {
       key: 'profile',
@@ -99,6 +99,12 @@ const Header = () => {
       key: 'orders',
       label: <NavLink to="/flareon/orders">Đơn hàng của tôi</NavLink>, // <<<--- SỬA LẠI ĐƯỜNG DẪN
       icon: <Receipt size={16} />,
+    },
+    {
+      key: 'history-modal', // Thêm key mới
+      label: 'Lịch sử (Modal)', // Thêm label
+      icon: <Clock size={16} />, // Dùng icon Clock
+      onClick: () => setIsModalOpen(true), // Thêm onClick
     },
     { type: 'divider' },
     {
@@ -172,21 +178,11 @@ const Header = () => {
           <div className="hidden md:flex items-center gap-3">
             {/* NÚT GIỎ HÀNG */}
 
-            <Button
-              type="text"
-              className="flex! items-center! justify-center!"
-              onClick={() => navigate('/flareon/cart')} // <<< SỬA LẠI
-              aria-label="Giỏ hàng"
-            >
-              <Badge count={totalItemCount} size="small" offset={[0, 2]}>
-                <ShoppingCart className="w-5 h-5 text-gray-700 hover:text-orange-500" />
-              </Badge>
-            </Button>
-
-            {/* Nút xem lịch sử đơn hàng (GIỮ NGUYÊN) */}
-            <Button type="default" icon={<Clock />} onClick={() => setIsModalOpen(true)}>
+            {/* --- THAY ĐỔI 2: XÓA NÚT "LỊCH SỬ ĐƠN HÀNG" ĐỘC LẬP --- */}
+            {/* <Button type="default" icon={<Clock />} onClick={() => setIsModalOpen(true)}>
               Lịch sử đơn hàng
-            </Button>
+            </Button> 
+            */}
 
             {/* LOGIC ĐĂNG NHẬP/ĐĂNG XUẤT */}
             {userData ? (
