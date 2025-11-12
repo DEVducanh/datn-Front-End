@@ -8,18 +8,20 @@ import { ConfigProvider } from 'antd'
 const queryClient = new QueryClient()
 
 createRoot(document.getElementById('root')).render(
-  <QueryClientProvider client={queryClient}>
-    <ConfigProvider
-      theme={{
-        token: {
-          colorPrimary: '#ff6900',
-        },
-      }}
-    >
-      <StrictMode>
-        <App />
-      </StrictMode>
-    </ConfigProvider>
-    <ReactQueryDevtools initialIsOpen={false} />
-  </QueryClientProvider>
+  <BrowserRouter>
+    <QueryClientProvider client={queryClient}>
+      <ConfigProvider
+        theme={{
+          token: {
+            colorPrimary: '#ff6900',
+          },
+        }}
+      >
+        <StrictMode>
+          <App />
+        </StrictMode>
+      </ConfigProvider>
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
+  </BrowserRouter>
 )
