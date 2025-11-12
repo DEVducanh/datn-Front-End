@@ -3,8 +3,8 @@ import { Button, Input, Form, Typography, Divider, notification } from 'antd'
 import { ArrowLeftOutlined } from '@ant-design/icons'
 
 import { useMutation } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
 import authAPI from '@/apis/auth/auth.api'
+import { useNavigate } from 'react-router'
 
 const { Title, Text, Link } = Typography
 
@@ -25,9 +25,9 @@ const Register = () => {
         description: data.message || 'Vui lòng đăng nhập để tiếp tục.',
         placement: 'topRight',
       })
-      
+
       // === SỬA LỖI TẠI ĐÂY (ĐÃ CẬP NHẬT ĐƯỜNG DẪN ĐÚNG) ===
-      navigate('/flareon/login') 
+      navigate('/flareon/login')
       // ===================================================
     },
 
@@ -56,7 +56,7 @@ const Register = () => {
       username: values.username || values.name,
       email: values.email,
       password: values.password,
-      phone: values.phone, 
+      phone: values.phone,
     }
     registerMutation.mutate(payload)
   }
@@ -66,7 +66,7 @@ const Register = () => {
       <header className="w-full flex justify-between items-center p-4">
         {/* Sửa lại nút quay lại để trỏ về trang chủ /flareon */}
         <Link
-          onClick={() => navigate('/flareon')} 
+          onClick={() => navigate('/flareon')}
           className="flex items-center !text-lg !text-orange-500 !hover:text-orange-500 font-bold cursor-pointer"
         >
           <ArrowLeftOutlined className="mr-1" />
@@ -187,7 +187,7 @@ const Register = () => {
             block
             size="large"
             // Sửa lại đường dẫn cho nút Đăng nhập
-            onClick={() => navigate('/flareon/login')} 
+            onClick={() => navigate('/flareon/login')}
             className="!h-14 !rounded-lg !text-lg !font-semibold !bg-gray-100 !border-none hover:!bg-gray-200"
           >
             Đăng nhập

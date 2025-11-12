@@ -2,7 +2,7 @@ import { CheckCircleTwoTone, CloseCircleTwoTone } from '@ant-design/icons'
 import { Button, Descriptions, Result } from 'antd'
 import axios from 'axios'
 import { useEffect } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router'
 
 const PaymentResult = () => {
   const location = useLocation()

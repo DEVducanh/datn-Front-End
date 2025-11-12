@@ -1,5 +1,4 @@
 import React, { useEffect } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query' // MỚI
 import { notification } from 'antd' // MỚI
 import http from '@/apis/http' // MỚI (Để kiểm tra)
@@ -9,6 +8,7 @@ import Categories from '@/layouts/DefaultLayout/components/Categories'
 import Features from '@/layouts/DefaultLayout/components/Features'
 import Hero from '@/layouts/DefaultLayout/components/Hero'
 import Products from '@/layouts/DefaultLayout/components/Products'
+import { useLocation, useNavigate } from 'react-router'
 
 const Home = () => {
   const location = useLocation()
@@ -17,7 +17,7 @@ const Home = () => {
   // === 1. (MỚI) ĐỊNH NGHĨA MUTATION ĐỂ CẬP NHẬT BÀN ===
   const updateTableStatusMutation = useMutation({
     // Dùng hàm 'update' từ file admin của bạn
-    mutationFn: ({ id, payload }) => tableAPI.update(id, payload), 
+    mutationFn: ({ id, payload }) => tableAPI.update(id, payload),
     onSuccess: () => {
       console.log('Cập nhật trạng thái bàn thành "occupied" thành công!')
       notification.success({
@@ -30,7 +30,8 @@ const Home = () => {
       console.error('Lỗi khi cập nhật trạng thái bàn:', error)
       notification.error({
         message: 'Không thể nhận bàn',
-        description: 'Bàn này có thể đang được bảo trì hoặc đã có người. Vui lòng liên hệ nhân viên.',
+        description:
+          'Bàn này có thể đang được bảo trì hoặc đã có người. Vui lòng liên hệ nhân viên.',
         placement: 'topRight',
       })
     },
@@ -50,7 +51,7 @@ const Home = () => {
         try {
           // A. Gọi API để xem bàn này có "empty" không
           // (Tôi giả định API này là GET /tables/:id)
-          const res = await http.get(`/tables/${id}`) 
+          const res = await http.get(`/tables/${id}`)
           const tableData = res.data // Lấy toàn bộ dữ liệu bàn
 
           if (tableData && tableData.status === 'empty') {
@@ -61,16 +62,15 @@ const Home = () => {
             // Chúng ta gửi lại toàn bộ data cũ, chỉ đổi 'status'
             const updatePayload = {
               ...tableData,
-              status: 'occupied' // Đổi trạng thái
+              status: 'occupied', // Đổi trạng thái
             }
             // Xóa _id, vì payload thường không chứa _id
-            delete updatePayload._id 
+            delete updatePayload._id
 
             updateTableStatusMutation.mutate({
               id: id,
               payload: updatePayload,
             })
-
           } else {
             // Bàn không trống (occupied, reserved, maintenance), không làm gì cả
             console.log(`Bàn ở trạng thái: ${tableData.status}. Không cập nhật.`)
@@ -79,7 +79,7 @@ const Home = () => {
               notification.warn({
                 message: 'Bàn đang bảo trì',
                 description: 'Bàn này hiện không thể sử dụng. Vui lòng chọn bàn khác.',
-                placement: 'topRight'
+                placement: 'topRight',
               })
             }
           }
@@ -107,7 +107,7 @@ const Home = () => {
       )
     }
     // Thêm mutation vào dependency array của useEffect
-  }, [location, navigate, updateTableStatusMutation]) 
+  }, [location, navigate, updateTableStatusMutation])
 
   // (Phần return ... <Hero /> ... giữ nguyên)
   return (
