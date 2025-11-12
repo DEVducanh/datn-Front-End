@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Card, Table, Tag, Statistic, Button, Divider, Space, message } from 'antd'
+import { Card, Table, Tag, Statistic, Button, Divider, Space, message, notification } from 'antd'
 
 import http from '@/apis/http'
 import SelectPayment from '../selectPayment'
@@ -95,10 +95,18 @@ const Checkout = ({ itemsList }) => {
 
             pay({ amount: totalAmount, invoicesId: invoiceId })
           } else {
-            console.log('Tạo hóa đơn thất bại:', response.message)
+            notification.error({
+              message: 'Tạo hóa đơn thất bại',
+              description: response.message || 'Không thể tạo hóa đơn vì đơn hàng chưa completed',
+              placement: 'topRight',
+            })
           }
         } catch (error) {
-          console.log(error)
+          notification.error({
+            message: 'Tạo hóa đơn thất bại',
+            description: response.message || 'Không thể tạo hóa đơn vì đơn hàng chưa completed',
+            placement: 'topRight',
+          })
         }
       } else {
         const invoiceId = invoice._id
