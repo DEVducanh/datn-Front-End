@@ -2,10 +2,10 @@
 import React, { useEffect, useMemo, useState } from 'react' // Thêm lại useMemo, useState
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import http from '@/apis/http'
-import { useParams, useNavigate, useLocation } from 'react-router-dom' // Sửa lại 'react-router' thành 'react-router-dom'
 import { Input, Spin } from 'antd' // Thêm lại Input, Spin
 import { Search } from 'lucide-react' // Thêm lại Search icon
 import ProductGrid from '@/layouts/DefaultLayout/components/ProductGrid'
+import { useLocation, useNavigate } from 'react-router'
 // import Banner from '@/layouts/DefaultLayout/components/Banner' // Banner này không dùng nữa
 
 // --- ẢNH BANNER MỚI (TỪ CODE CŨ) ---

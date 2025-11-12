@@ -1,10 +1,9 @@
 import React, { useEffect } from 'react' // Thêm useEffect
-import { useLocation, useNavigate } from 'react-router-dom' // Thêm 2 hooks này
-
 import Categories from '@/layouts/DefaultLayout/components/Categories'
 import Features from '@/layouts/DefaultLayout/components/Features'
 import Hero from '@/layouts/DefaultLayout/components/Hero'
 import Products from '@/layouts/DefaultLayout/components/Products'
+import { useLocation, useNavigate } from 'react-router'
 
 const Home = () => {
   const location = useLocation() // Để đọc URL hiện tại

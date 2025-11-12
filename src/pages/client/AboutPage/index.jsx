@@ -1,7 +1,7 @@
 import React from 'react'
 import { Typography, Button, Avatar } from 'antd' // Import component Antd
 import { Zap, Leaf, ChefHat, Smile } from 'lucide-react' // Import icons
-import { useNavigate } from 'react-router-dom' // Import hook để chuyển trang
+import { useNavigate } from 'react-router'
 
 const { Title, Text, Paragraph } = Typography
 

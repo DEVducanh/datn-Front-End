@@ -3,10 +3,10 @@ import { Button, Input, Form, Typography, Divider, notification } from 'antd'
 import { ArrowLeftOutlined } from '@ant-design/icons'
 
 import { useMutation } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
 import authAPI from '@/apis/auth/auth.api'
 // 👈 1. IMPORT HOOK useAuth
 import { useAuth } from '@/contexts/AuthContext'
+import { useNavigate } from 'react-router'
 
 const { Title, Text, Link } = Typography
 

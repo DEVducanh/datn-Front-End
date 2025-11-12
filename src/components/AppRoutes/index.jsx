@@ -1,3 +1,5 @@
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router'
+
 import AdminLayout from '@/layouts/AdminLayout'
 import DefaultLayout from '@/layouts/DefaultLayout'
 
@@ -26,7 +28,6 @@ import StaffManagement from '@/pages/admin/StaffManagement'
 import UserManagement from '@/pages/admin/UserManagement'
 import ContactPage from '@/pages/client/Contact/ContactPage'
 import PaymentResult from '../PaymentResult'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 
 const AppRoutes = () => {
   return (
