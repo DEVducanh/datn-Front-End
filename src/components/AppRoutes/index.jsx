@@ -27,7 +27,6 @@ import ReviewManagement from '@/pages/admin/ReviewManagement'
 import StaffManagement from '@/pages/admin/StaffManagement'
 import UserManagement from '@/pages/admin/UserManagement'
 import ContactPage from '@/pages/client/Contact/ContactPage'
-import Checkout from '@/pages/client/OrderPage/checkout'
 import PaymentResult from '../PaymentResult'
 
 const AppRoutes = () => {

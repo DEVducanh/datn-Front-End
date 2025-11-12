@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Modal, Radio, Button } from 'antd'
 
 const SelectPayment = ({ visible, onClose, onSelect }) => {
-  const [paymentMethod, setPaymentMethod] = useState('vnpay')
+  const [paymentMethod, setPaymentMethod] = useState('')
 
   const handleOk = () => {
     onSelect(paymentMethod)
