@@ -59,7 +59,7 @@ const AppRoutes = () => {
 
           <Route element={<ProtectedRoute />}>
             <Route path="cart" element={<CartPage />} />
-            <Route path="orders" element={<Checkout />} />
+            <Route path="orders" element={<OrderPage />} />
           </Route>
 
           <Route element={<AuthRedirect />}>

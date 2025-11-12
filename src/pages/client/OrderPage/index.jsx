@@ -1,276 +1,141 @@
 import React, { useEffect, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
-import { Tag } from 'antd'
-
+import { Table, Button, Space, Tag } from 'antd'
+import { EyeOutlined, CreditCardOutlined, DeleteOutlined } from '@ant-design/icons'
 import http from '@/apis/http'
-import SelectPayment from './selectPayment'
-import axios from 'axios'
 
-const STATUS_COLOR = {
-  pending: 'orange',
-  processing: 'blue',
-  completed: 'green',
-  cancelled: 'red',
-  'n/a': 'default',
-  unknown: 'default',
-}
-
-const formatCurrency = (amount) => {
-  return (amount || 0).toLocaleString('vi-VN') + 'đ'
-}
-
-const ORDER_ITEM_BASE_URL = '/order-item'
-const orderAPI = {
-  getOrdersForTableId: (tableId) => {
-    return http.get(`${ORDER_ITEM_BASE_URL}/by-user-or-table?table_id=${tableId}`)
+const mockOrders = [
+  {
+    id: 'ORD001',
+    productName: 'Nước hoa Dior Sauvage',
+    quantity: 2,
+    price: 3500000,
+    status: 'pending',
+    createdAt: '2025-11-12 10:30',
   },
-  getOrderItemsByCurrentUser: () => {
-    return http.get(`${ORDER_ITEM_BASE_URL}/by-user-or-table`)
+  {
+    id: 'ORD002',
+    productName: 'Nước hoa Chanel No.5',
+    quantity: 1,
+    price: 4200000,
+    status: 'completed',
+    createdAt: '2025-11-10 14:15',
   },
-}
+  {
+    id: 'ORD003',
+    productName: 'Nước hoa Gucci Bloom',
+    quantity: 3,
+    price: 3000000,
+    status: 'pending',
+    createdAt: '2025-11-09 09:50',
+  },
+]
 
-const useAuth = () => {
-  const rawUserData = localStorage.getItem('userData')
-  return { isLoggedIn: !!rawUserData }
-}
+const OrderPage = () => {
+  const [orders, setOrders] = useState([])
 
-const FinalOrderBill = ({ itemsList, totalAmount, contextId }) => {
-  const [modalVisible, setModalVisible] = useState(false)
-  const [invoicesId, setInvoicesId] = useState(null)
-  const tableId = localStorage.getItem('currentTableId')
-  console.log(tableId)
+  useEffect(() => {
+    const userData = localStorage.getItem('user')
+    let userId = null
+    if (userData) {
+      try {
+        const user = JSON.parse(userData)
+        userId = user._id
+      } catch (error) {
+        console.error('Lỗi parse user từ localStorage:', error)
+      }
+    }
+    const tableId = localStorage.getItem('currentTableId')
+    if (userId && tableId) {
+      fetchOrders(userId, tableId)
+    }
+  }, [])
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['order', tableId],
-    queryFn: async () => {
-      const order = await axios.get(
-        `https://api-datn-orderfood-backend-2.onrender.com/order-item/by-user-or-table?table_id=${tableId}`
+  const fetchOrders = async (userId, tableId) => {
+    try {
+      const res = await http.get(
+        `http://localhost:8080/orders/by-table/${tableId}?userId=${userId}`
       )
-      console.log('order', order.data?.result?.data?.order_id?.id)
-      const firstOrderId = data[0]?.order_id?._id
-      console.log('firstOrderId:', firstOrderId)
-      return firstOrderId
+      const data = res.data
+      setOrders(data)
+    } catch (error) {
+      console.error('Lỗi khi fetch orders:', error)
+    }
+  }
+  const allCompletedOrCancelled = orders.every(
+    (order) => order.status === 'Completed' || order.status === 'Cancelled'
+  )
+
+  const columns = [
+    {
+      title: 'STT',
+      key: 'index',
+      render: (_, __, index) => index + 1,
+      width: 60,
     },
-  })
-
-  const handlePayment = async (total) => {
-    setModalVisible(true)
-  }
-  const handleSelect = (method) => {
-    console.log('payment', method)
-  }
-  if (itemsList.length === 0) {
-    return (
-      <div className="text-center mt-20 text-gray-600 text-lg">
-        Bạn chưa có món ăn nào trong các đơn hàng hiện tại.
-      </div>
-    )
-  }
+    {
+      title: 'Mã đơn hàng',
+      dataIndex: '_id',
+      key: '_id',
+      render: (text) => text.slice(0, 8),
+    },
+    {
+      title: 'Giá',
+      dataIndex: 'total_price',
+      key: 'total_price',
+    },
+    {
+      title: 'Trạng thái',
+      dataIndex: 'status',
+      key: 'status',
+      render: (status) => {
+        let color = 'blue'
+        if (status === 'Completed') color = 'green'
+        if (status === 'Pending') color = 'orange'
+        if (status === 'Cancelled') color = 'red'
+        return <Tag color={color}>{status.toUpperCase()}</Tag>
+      },
+    },
+    {
+      title: 'Thời gian tạo',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+    },
+    {
+      title: 'Hành động',
+      key: 'action',
+      render: (_, record) => (
+        <Space size="middle">
+          <Button type="default" icon={<EyeOutlined />}>
+            Chi tiết
+          </Button>
+          {record.status === 'Pending' && (
+            <Button type="primary" danger icon={<DeleteOutlined />}>
+              Hủy
+            </Button>
+          )}
+        </Space>
+      ),
+    },
+  ]
 
   return (
-    <div className="border border-gray-300 rounded-lg p-4 mb-8 shadow-md w-[672px]">
-      {/* Header chung: Không hiển thị mã đơn hàng */}
-      <div className="pb-2 border-b border-gray-200 mb-4">
-        <div className="text-2xl font-bold text-gray-800">Hóa đơn Tạm tính</div>
-        <div className="text-sm text-gray-500 mt-1">
-          Tổng số món đang chờ xử lý: **{itemsList.length}**
-        </div>
-      </div>
-
-      {/* Bảng Chi Tiết Món Ăn (Tất cả món được gộp) */}
-      <div className="w-full text-sm">
-        {/* Header Bảng */}
-        <div className="grid grid-cols-7 gap-2 font-semibold text-gray-600 border-b border-gray-200 pb-2">
-          <div className="col-span-3">Món ăn</div>
-          <div className="text-center">SL</div>
-          <div className="text-right">Giá (Đơn)</div>
-          <div className="text-center">Trạng thái</div>
-          <div className="text-right">Tổng món</div>
-        </div>
-
-        {/* Danh sách Món Ăn Gộp */}
-        {itemsList.map((item, index) => (
-          <div
-            key={item.id || index}
-            className="grid grid-cols-7 gap-2 py-2 border-b border-gray-100 last:border-b-0"
+    <div style={{ padding: '24px' }}>
+      <h2>Danh sách đơn hàng của bạn</h2>
+      <Table columns={columns} dataSource={orders} rowKey="id" />
+      {allCompletedOrCancelled && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <Button
+            type="primary"
+            icon={<CreditCardOutlined />}
+            size="large" // tăng kích thước
+            style={{ padding: '0 30px', fontSize: '18px' }} // tùy chỉnh padding và chữ
           >
-            <div className="col-span-3 text-gray-800">{item.name}</div>
-            <div className="text-center font-medium">{item.quantity}</div>
-            <div className="text-right">{formatCurrency(item.price)}</div>
-            <div className="text-center">
-              <Tag
-                size="small"
-                color={STATUS_COLOR[(item.status || '').toLowerCase()] || 'default'}
-              >
-                {item.status}
-              </Tag>
-            </div>
-            <div className="text-right font-medium text-orange-600">
-              {formatCurrency(item.subtotal)}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Footer Tổng Tiền và Nút Thanh Toán DUY NHẤT */}
-      <div className="flex justify-between items-center pt-4 mt-4 border-t border-gray-300">
-        <div className="text-2xl font-bold text-gray-800">
-          TỔNG CỘNG HÓA ĐƠN: <span className="text-red-600">{formatCurrency(totalAmount)}</span>
+            Thanh toán
+          </Button>
         </div>
-
-        <button
-          onClick={() => handlePayment(totalAmount)}
-          className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded transition duration-200 shadow-lg"
-        >
-          THANH TOÁN TỔNG HỢP ({formatCurrency(totalAmount)})
-        </button>
-      </div>
-      <SelectPayment
-        visible={modalVisible}
-        onClose={() => setModalVisible(false)}
-        onSelect={handleSelect}
-      />
-    </div>
-  )
-}
-// -----------------------------------------------------------
-
-const OrdersPage = () => {
-  const navigate = useNavigate()
-  const { isLoggedIn } = useAuth()
-
-  const tableId = localStorage.getItem('currentTableId')
-  const rawUserData = localStorage.getItem('userData')
-  const user = rawUserData ? JSON.parse(rawUserData) : {}
-  const displayUserName = user.username || user.email || 'Khách hàng'
-
-  let queryFn
-  let queryKey
-  let isQueryEnabled = false
-  let contextId = 'User'
-
-  if (tableId) {
-    queryFn = () => orderAPI.getOrdersForTableId(tableId)
-    queryKey = ['tableOrderItems', tableId]
-    isQueryEnabled = true
-    contextId = `Bàn số: ${tableId}`
-  } else if (isLoggedIn) {
-    queryFn = () => orderAPI.getOrderItemsByCurrentUser()
-    queryKey = ['userOrderItems']
-    isQueryEnabled = true
-    contextId = `Tài khoản: ${displayUserName}`
-  } else {
-    queryFn = async () => ({ data: [] })
-    queryKey = ['noOrders']
-    isQueryEnabled = false
-    contextId = 'Chưa đăng nhập'
-  }
-
-  const {
-    data: orders,
-    isLoading,
-    isError,
-    error, // Lấy đối tượng lỗi
-  } = useQuery({
-    queryKey: queryKey,
-    queryFn: queryFn,
-    enabled: isQueryEnabled,
-    staleTime: 60 * 1000,
-    gcTime: 5 * 60 * 1000,
-  })
-
-  if (isError) {
-    console.error('   - Error Status:', error.response?.status)
-  } else if (isLoading) {
-    console.log('🐛 DEBUG LOG 2: Đang tải...')
-  } else {
-    console.log('🐛 DEBUG LOG 2: Tải thành công. Dữ liệu:', orders)
-  }
-
-  if (isLoading) {
-    return (
-      <div className="text-center mt-10 text-xl text-orange-500">Đang tải danh sách món ăn...</div>
-    )
-  }
-
-  if (isError) {
-    const errorMessage = error?.message || 'Lỗi không xác định.'
-    const statusMessage = error.response?.status ? `(Status: ${error.response.status})` : ''
-
-    return (
-      <div className="text-center mt-10 text-red-600">
-        Đã xảy ra lỗi khi lấy dữ liệu đơn hàng. Vui lòng kiểm tra lại.
-        <div className="text-sm text-gray-500 mt-2">
-          Chi tiết: **{errorMessage}** {statusMessage}
-        </div>
-      </div>
-    )
-  }
-
-  let allItemsRaw = []
-  if (Array.isArray(orders?.result?.data)) {
-    allItemsRaw = orders.result.data
-  } else if (Array.isArray(orders?.data?.data)) {
-    allItemsRaw = orders.data.data
-  } else if (Array.isArray(orders?.data)) {
-    allItemsRaw = orders.data
-  }
-
-  // ✨ LOGIC GỘP TẤT CẢ MÓN ĂN & TÍNH TỔNG CỘNG ✨
-  let finalItemsList = []
-  let grandTotal = 0
-
-  allItemsRaw.forEach((item) => {
-    // Chỉ gộp các món có trạng thái Pending/Processing (Chưa hoàn thành/hủy)
-    const status = (item.status || 'unknown').toLowerCase()
-
-    // Nếu bạn chỉ muốn gộp các món CHƯA thanh toán:
-    // if (status !== 'completed' && status !== 'cancelled') {
-
-    const subtotal = item.subtotal || item.dish_id?.price * item.quantity || 0
-
-    finalItemsList.push({
-      id: item._id, // ID của Order Item
-      name: item.dish_id?.dish_name || 'Món ăn không tên',
-      status: item.status || 'Unknown',
-      price: item.dish_id?.price || 0,
-      quantity: item.quantity,
-      subtotal: subtotal,
-    })
-
-    grandTotal += subtotal
-    // }
-  })
-
-  console.log('🐛 DEBUG LOG 3: Tổng số món gộp:', finalItemsList.length, 'Tổng tiền:', grandTotal)
-
-  return (
-    <div
-      className="bg-white flex flex-col items-center"
-      style={{ width: 744, minHeight: 1177, margin: '0 auto' }}
-    >
-      {/* Header */}
-      <div className="w-[672px] mx-auto pt-6 pb-4 border-b border-gray-200">
-        <span
-          className="text-orange-500 text-xl font-semibold cursor-pointer"
-          onClick={() => navigate('/')}
-        >
-          &lt; Hóa đơn Tạm tính ({finalItemsList.length} món)
-        </span>
-
-        {/* HIỂN THỊ THÔNG TIN BÀN HOẶC NGƯỜI DÙNG */}
-        <div className="text-base font-bold text-gray-700 mt-1">
-          Tổng hợp cho: <span className="text-orange-600">{contextId}</span>
-        </div>
-      </div>
-
-      {/* Order List - Sử dụng FinalOrderBill duy nhất */}
-      <div className="w-[672px] flex flex-col mt-6">
-        <FinalOrderBill itemsList={finalItemsList} totalAmount={grandTotal} contextId={contextId} />
-      </div>
+      )}
     </div>
   )
 }
 
-export default OrdersPage
+export default OrderPage
