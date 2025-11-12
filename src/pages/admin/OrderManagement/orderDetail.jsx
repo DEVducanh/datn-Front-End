@@ -12,7 +12,7 @@ import {
   message,
 } from 'antd'
 import { useQueryClient, useMutation } from '@tanstack/react-query'
-import http from '@/apis/http' // 👈 Đảm bảo import này đúng
+import http from '@/apis/http' // Đảm bảo import này đúng
 
 const { Title } = Typography
 
@@ -77,19 +77,14 @@ const OrderModalDetail = ({ open, order, onCancel, orderItemsData, isLoadingItem
   const queryClient = useQueryClient()
   const [messageApi, contextHolder] = message.useMessage()
 
-  // LẤY DỮ LIỆU TỪ PROP ĐÃ FETCH
   const orderItems = orderItemsData || []
   const orderId = order?._id
 
-  // --- LOGIC CẬP NHẬT TRẠNG THÁI (useMutation) ---
   const { mutate: updateStatus, isPending: isUpdating } = useMutation({
     mutationFn: updateOrderItemStatusAPI,
     onSuccess: (response) => {
       message.success(`Cập nhật trạng thái thành công: ${response.message || ''}`)
-
-      // ✅ Bắt buộc phải invalidate cache để tải lại dữ liệu
       queryClient.invalidateQueries({ queryKey: ['orderItems', orderId] })
-      // Vô hiệu hóa cache danh sách Orders (vì trạng thái tổng có thể thay đổi)
       queryClient.invalidateQueries({ queryKey: ['orders'] })
     },
     onError: (error) => {

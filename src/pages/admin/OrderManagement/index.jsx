@@ -107,7 +107,7 @@ const OrderManagement = () => {
 
   const { mutate: updateOrder } = useMutation({
     mutationFn: async ({ id, data }) => {
-      return await http.patch(`/orders/${id}`, data)
+      return await http.patch(`/orders/${id}/status`, data)
     },
     onSuccess: () => {
       message.success('Cập nhật đơn hàng thành công!')
@@ -120,16 +120,16 @@ const OrderManagement = () => {
 
   const { mutate: deleteOrder } = useMutation({
     mutationFn: async (id) => {
-      console.log(`[DELETE API] Đang gọi API DELETE cho ID: ${id}`);
+      console.log(`[DELETE API] Đang gọi API DELETE cho ID: ${id}`)
       return await http.delete(`/orders/${id}`)
     },
     onSuccess: (data) => {
       deleteSuccess()
-      console.log('✅ XÓA ĐƠN HÀNG THÀNH CÔNG:', data);
+      console.log('✅ XÓA ĐƠN HÀNG THÀNH CÔNG:', data)
       queryClient.invalidateQueries({ queryKey: ['orders'] })
     },
     onError: (error) => {
-      console.error('❌ LỖI API DELETE Order:', error.response);
+      console.error('❌ LỖI API DELETE Order:', error.response)
 
       let errorMessage = 'Xóa đơn hàng thất bại.'
       if (error.response) {
@@ -235,9 +235,9 @@ const OrderManagement = () => {
                   cancelText: 'Hủy',
                   // ⭐ SỬA LỖI: CHUYỂN onOk THÀNH HÀM ASYNC VÀ RETURN PROMISE
                   onOk: async () => {
-                    console.log(`[DELETE CHECK] CHẮC CHẮN GỌI DELETE cho ID: ${record._id}`);
+                    console.log(`[DELETE CHECK] CHẮC CHẮN GỌI DELETE cho ID: ${record._id}`)
                     // Trả về Promise để Modal chờ
-                    return deleteOrder(record._id);
+                    return deleteOrder(record._id)
                   },
                 })
               }}
@@ -267,7 +267,7 @@ const OrderManagement = () => {
 
   const tableData = Array.isArray(data) ? data : data?.data || []
 
-  // LOGIC LẤY MẢNG MÓN ĂN TỪ CÁC TRƯỜNG KHÁC NHAU 
+  // LOGIC LẤY MẢNG MÓN ĂN TỪ CÁC TRƯỜNG KHÁC NHAU
   const orderItems =
     orderItemData && Array.isArray(orderItemData.data)
       ? orderItemData.data
@@ -285,7 +285,6 @@ const OrderManagement = () => {
         <h1 className="font-bold text-3xl mb-2">Quản lý đơn hàng</h1>
         <Breadcrumb items={[{ title: 'Trang chủ' }, { title: 'Quản lý đơn hàng' }]} />
       </section>
-
       <Card className="shadow-sm rounded-2xl xl:col-span-2" title="Đơn hàng gần đây">
         <div className="mb-4 flex justify-between">
           <div
@@ -335,7 +334,6 @@ const OrderManagement = () => {
           className="rounded-xl"
         />
       </Card>
-
       <OrderModalDetail
         order={selectedOrder}
         open={modalDetailOpen}
@@ -344,7 +342,6 @@ const OrderManagement = () => {
         orderItemsData={orderItems}
         isLoadingItems={isLoadingItems}
       />
-
       <OrderModalEdit
         open={modalOpen}
         order={selectedOrder}
