@@ -3,15 +3,17 @@
 import AppRoutes from '@components/AppRoutes'
 import '@shared/styles/tailwind.css'
 import { ToastContainer } from 'react-toastify'
-// 👈 1. IMPORT AuthProvider TỪ FILE CONTEXT CỦA BẠN
+
 import { AuthProvider } from './contexts/AuthContext'
+import { MessageProvider } from './contexts/MessageProvider'
 
 function App() {
   return (
-    // 👈 2. BỌC AppRoutes BẰNG AuthProvider
     <AuthProvider>
-      <AppRoutes />
-      <ToastContainer />
+      <MessageProvider>
+        <AppRoutes />
+        <ToastContainer />
+      </MessageProvider>
     </AuthProvider>
   )
 }

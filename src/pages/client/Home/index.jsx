@@ -9,20 +9,13 @@ const Home = () => {
   const location = useLocation() // Để đọc URL hiện tại
   const navigate = useNavigate() // Để thay đổi URL
 
-  // === THÊM ĐOẠN CODE NÀY ===
   useEffect(() => {
-    // 1. Lấy các tham số từ URL (ví dụ: ?table_id=abc)
     const searchParams = new URLSearchParams(location.search)
     const tableIdFromUrl = searchParams.get('table_id')
 
-    // 2. Nếu tìm thấy 'table_id'
     if (tableIdFromUrl) {
-      // 3. Lưu ngay vào localStorage
-      console.log('Đã phát hiện và lưu table_id:', tableIdFromUrl)
       localStorage.setItem('currentTableId', tableIdFromUrl)
 
-      // 4. (Khuyên dùng) Xóa 'table_id' khỏi URL để làm sạch
-      // Giúp người dùng F5 trang mà không bị lưu lại ID
       searchParams.delete('table_id')
       navigate(
         {
@@ -33,7 +26,6 @@ const Home = () => {
       )
     }
   }, [location, navigate]) // Chạy lại mỗi khi URL thay đổi
-  // === KẾT THÚC ĐOẠN CODE ===
 
   return (
     <>

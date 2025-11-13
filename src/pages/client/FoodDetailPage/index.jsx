@@ -3,23 +3,21 @@ import { useParams, useNavigate, useLocation } from 'react-router'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import http from '@/apis/http'
 import CommentCard from '@/layouts/DefaultLayout/components/CommentCard'
+import { useMessage } from '@/contexts/MessageProvider'
 
 const FoodDetailPage = () => {
+  const message = useMessage()
   const { id: productId } = useParams()
   const [quantity, setQuantity] = useState(1)
   const navigate = useNavigate()
-  const location = useLocation() // Đã có
+  const location = useLocation()
   const queryClient = useQueryClient()
-
-  // === 1. STATE MỚI CHO FORM ĐÁNH GIÁ ===
   const [newRating, setNewRating] = useState(5)
   const [newComment, setNewComment] = useState('')
   const [currentUser, setCurrentUser] = useState(null)
   const [orderIdToReview, setOrderIdToReview] = useState(null)
 
-  // === 2. EFFECT MỚI: Lấy user và order_id (nếu có) ===
   useEffect(() => {
-    // 1. Lấy user từ localStorage để biết đã đăng nhập chưa
     try {
       const userString = localStorage.getItem('user')
       if (userString) {
@@ -29,7 +27,6 @@ const FoodDetailPage = () => {
       console.error('Không thể parse user data từ localStorage', e)
     }
 
-    // 2. Lấy order_id từ URL (ví dụ: /product/...?order_id=abc)
     const searchParams = new URLSearchParams(location.search)
     const orderId = searchParams.get('order_id')
     if (orderId) {
@@ -38,7 +35,6 @@ const FoodDetailPage = () => {
     }
   }, [location.search]) // Chạy lại khi URL thay đổi
 
-  // --- GỌI API LẤY CHI TIẾT SẢN PHẨM (GIỮ NGUYÊN) ---
   const {
     data: foodDetails,
     isLoading,
@@ -64,7 +60,6 @@ const FoodDetailPage = () => {
     staleTime: 1000 * 60 * 5,
   })
 
-  // --- QUERY LẤY BÌNH LUẬN (GIỮ NGUYÊN) ---
   const {
     data: feedbackData,
     isLoading: isLoadingFeedbacks,
@@ -86,10 +81,9 @@ const FoodDetailPage = () => {
 
   // --- Mutation để thêm vào giỏ hàng (GIỮ NGUYÊN) ---
   const addToCartMutation = useMutation({
-    // ... (Giữ nguyên toàn bộ logic của addToCartMutation) ...
     mutationFn: (payload) => http.post('/cart/add-item', payload),
     onSuccess: (response, variables) => {
-      alert(`Đã thêm ${variables.quantity} "${variables.dishName}" vào giỏ!`)
+      message.success(`Đã thêm ${variables.quantity} "${variables.dishName}" vào giỏ!`)
       const { table_id: tableId, user_id: userId } = variables
       if (tableId && userId) {
         queryClient.invalidateQueries({ queryKey: ['cart', tableId, userId] })
@@ -98,76 +92,64 @@ const FoodDetailPage = () => {
     onError: (err, variables) => {
       console.error(`Lỗi khi thêm '${variables.dishName}' vào giỏ:`, err)
       if (err.response?.status === 401) {
-        alert('Vui lòng đăng nhập để thêm sản phẩm.')
+        message.warning('Vui lòng đăng nhập để thêm sản phẩm.')
         navigate(
           `/flareon/login?redirect=${encodeURIComponent(location.pathname + location.search)}`
         )
       } else {
         const errMsg = err.response?.data?.message || 'Có lỗi xảy ra khi thêm vào giỏ.'
-        alert(errMsg)
+        message.error(errMsg)
       }
     },
   })
 
-  // === 3. MUTATION MỚI: ĐỂ TẠO FEEDBACK (BÌNH LUẬN) ===
   const createFeedbackMutation = useMutation({
     mutationFn: (payload) => {
-      console.log('Gọi API POST /feedback với:', payload)
-      // Dựa trên controller, API trả về { message, newFeedBack } hoặc { success, message }
       return http.post('/feedback', payload)
     },
     onSuccess: (res) => {
-      console.log('Tạo feedback thành công:', res)
-      // Service của bạn trả về { success, message, data } hoặc { success, message }
+      message.success('Tạo feedback thành công:', res)
       if (res && (res.success || res.newFeedBack)) {
-        alert('Cảm ơn bạn đã gửi đánh giá!')
-        // Làm mới danh sách bình luận
+        message.success('Cảm ơn bạn đã gửi đánh giá!')
         queryClient.invalidateQueries({ queryKey: ['feedbacks', productId] })
-        // Reset form
         setNewComment('')
         setNewRating(5)
-        // Xóa order_id khỏi URL để tránh review lại
         navigate(location.pathname, { replace: true })
         setOrderIdToReview(null)
       } else {
-        // Xử lý trường hợp service trả về success: false (ví dụ: "Bạn đã review rồi")
-        alert(`Lỗi: ${res?.message || 'Không thể gửi đánh giá.'}`)
+        message.error(`Lỗi: ${res?.message || 'Không thể gửi đánh giá.'}`)
       }
     },
     onError: (err) => {
-      console.error('Lỗi khi tạo feedback:', err)
       const errMsg = err.response?.data?.message || 'Có lỗi xảy ra, vui lòng thử lại.'
-      alert(errMsg)
+      message.error(errMsg)
     },
   })
 
-  // --- Hàm xử lý số lượng (Giữ nguyên) ---
   const handleIncrease = () => setQuantity((prev) => prev + 1)
   const handleDecrease = () => setQuantity((prev) => (prev > 1 ? prev - 1 : 1))
 
-  // --- Hàm thêm vào giỏ (Giữ nguyên) ---
   const handleAddToCart = () => {
-    // ... (Giữ nguyên toàn bộ logic của handleAddToCart) ...
     if (!foodDetails) {
-      alert('Thông tin món ăn chưa sẵn sàng, vui lòng thử lại.')
+      message.warning('Thông tin món ăn chưa sẵn sàng, vui lòng thử lại.')
       return
     }
     let userId = null
     try {
       const userString = localStorage.getItem('user')
       if (!userString) {
-        alert('Bạn cần đăng nhập để thêm vào giỏ hàng.')
+        message.warning('Bạn cần đăng nhập để thêm vào giỏ hàng.')
         return
       }
       userId = JSON.parse(userString)?._id
       if (!userId) throw new Error('User ID không hợp lệ.')
     } catch (e) {
-      alert('Lỗi khi lấy thông tin người dùng. Vui lòng thử đăng nhập lại.')
+      message.error('Lỗi khi lấy thông tin người dùng. Vui lòng thử đăng nhập lại.')
       return
     }
     const mongoTableId = localStorage.getItem('currentTableId')
     if (!mongoTableId) {
-      alert('Lỗi: Không tìm thấy thông tin bàn hiện tại.')
+      message.error('Lỗi: Không tìm thấy thông tin bàn hiện tại.')
       return
     }
     const payload = {
@@ -184,20 +166,18 @@ const FoodDetailPage = () => {
     e.preventDefault()
 
     if (!currentUser || !currentUser._id) {
-      alert('Vui lòng đăng nhập để đánh giá.')
+      message.error('Vui lòng đăng nhập để đánh giá.')
       return
     }
     if (!orderIdToReview) {
-      // Cái này không nên xảy ra vì form đã bị ẩn, nhưng kiểm tra cho chắc
-      alert('Lỗi: Không tìm thấy đơn hàng ("order_id") để đánh giá.')
+      message.error('Lỗi: Không tìm thấy đơn hàng ("order_id") để đánh giá.')
       return
     }
     if (newComment.trim() === '') {
-      alert('Vui lòng nhập nội dung bình luận.')
+      message.error('Vui lòng nhập nội dung bình luận.')
       return
     }
 
-    // Xác định 'type' dựa trên rating (theo logic của service)
     const feedbackType = newRating >= 4 ? 'positive' : newRating >= 3 ? 'neutral' : 'negative'
 
     const payload = {
@@ -207,19 +187,16 @@ const FoodDetailPage = () => {
       type: feedbackType,
       rating: newRating,
       content: newComment.trim(),
-      // image: null // (Bạn có thể thêm logic upload ảnh ở đây nếu muốn)
     }
 
     console.log('Chuẩn bị gửi feedback:', payload)
     createFeedbackMutation.mutate(payload)
   }
 
-  // --- XỬ LÝ TRẠNG THÁI LOADING/ERROR (Cho chi tiết món ăn) ---
   if (isLoading) return <p>Đang tải chi tiết món ăn...</p>
   if (isError) return <p>Lỗi khi tải món ăn: {error?.message || 'Unknown error'}</p>
   if (!foodDetails) return <p>Không tìm thấy thông tin món ăn.</p>
 
-  // --- RENDER GIAO DIỆN ---
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
       {/* ... (Phần JSX cho thông tin món ăn và nút "Thêm vào giỏ") ... */}
@@ -267,10 +244,14 @@ const FoodDetailPage = () => {
         {/* --- FORM THÊM BÌNH LUẬN MỚI --- */}
         {/* Chỉ hiển thị nếu có user và order_id từ URL */}
         {orderIdToReview && currentUser ? (
-          <form onSubmit={handleSubmitFeedback} className="mb-8 p-4 border rounded-lg shadow-sm bg-gray-50">
+          <form
+            onSubmit={handleSubmitFeedback}
+            className="mb-8 p-4 border rounded-lg shadow-sm bg-gray-50"
+          >
             <h3 className="text-lg font-semibold mb-2">Để lại đánh giá của bạn</h3>
             <p className="text-sm text-gray-600 mb-4">
-              Bạn đang đánh giá cho món ăn trong đơn hàng <span className='font-mono text-sm'>{orderIdToReview}</span>
+              Bạn đang đánh giá cho món ăn trong đơn hàng{' '}
+              <span className="font-mono text-sm">{orderIdToReview}</span>
             </p>
 
             {/* Star Rating */}
@@ -348,8 +329,7 @@ const FoodDetailPage = () => {
             })}
           </div>
         ) : (
-          !isLoadingFeedbacks &&
-          !isErrorFeedbacks && <p>Chưa có đánh giá nào cho món ăn này.</p>
+          !isLoadingFeedbacks && !isErrorFeedbacks && <p>Chưa có đánh giá nào cho món ăn này.</p>
         )}
       </div>
     </div>
