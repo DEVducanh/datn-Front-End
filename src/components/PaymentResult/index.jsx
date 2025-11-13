@@ -50,7 +50,6 @@ const PaymentResult = () => {
                 },
               }
             )
-            console.log('Kết quả:', result.data)
           } catch (error) {
             console.error('Lỗi gọi API:', error)
           }

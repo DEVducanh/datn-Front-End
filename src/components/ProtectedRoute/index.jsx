@@ -2,13 +2,11 @@ import React from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Navigate, Outlet, useLocation } from 'react-router'
 
-// Protect routes that require authentication. If not logged in, redirect to /login
 export const ProtectedRoute = () => {
   const { isLoggedIn } = useAuth()
   const location = useLocation()
 
   if (!isLoggedIn) {
-    // Preserve the attempted URL in state so the app can redirect after login
     return <Navigate to="/login" replace state={{ from: location }} />
   }
 

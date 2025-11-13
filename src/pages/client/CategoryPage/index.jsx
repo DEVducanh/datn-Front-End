@@ -1,4 +1,3 @@
-// src/pages/client/CategoryPage/index.jsx
 import React, { useEffect, useMemo, useState } from 'react' // Thêm lại useMemo, useState
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import http from '@/apis/http'
@@ -6,21 +5,16 @@ import { Input, Spin } from 'antd' // Thêm lại Input, Spin
 import { Search } from 'lucide-react' // Thêm lại Search icon
 import ProductGrid from '@/layouts/DefaultLayout/components/ProductGrid'
 import { useLocation, useNavigate, useParams } from 'react-router'
-// import Banner from '@/layouts/DefaultLayout/components/Banner' // Banner này không dùng nữa
+import { useMessage } from '@/contexts/MessageProvider'
 
-// --- ẢNH BANNER MỚI (TỪ CODE CŨ) ---
 const HERO_IMAGE_URL =
   'https://images.unsplash.com/photo-1504674900247-0877df9cc836?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1280'
 
-// --- COMPONENT SIDEBAR DANH MỤC (TỪ CODE CŨ) ---
 const CategorySidebar = ({ selectedId, onSelectCategory }) => {
-  // Lấy danh sách category từ API
   const { data: categories = [], isLoading } = useQuery({
     queryKey: ['categories'],
     queryFn: async () => {
-      console.log('Đang gọi API GET /category...')
       const res = await http.get('/category')
-      console.log('API GET /category trả về:', res)
       if (res && Array.isArray(res.data)) {
         return res.data
       }
@@ -84,15 +78,13 @@ const CategoryPage = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const queryClient = useQueryClient()
-
-  // --- THÊM LẠI STATE CHO FILTER VÀ SEARCH ---
+  const message = useMessage()
   const [selectedCategoryId, setSelectedCategoryId] = useState(null) // null = tất cả
   const [searchText, setSearchText] = useState('') // State cho tìm kiếm
 
   // --- useEffect (Giữ nguyên của bạn) ---
   useEffect(() => {
     if (qrCode) {
-      // Chỉ bắt buộc đăng nhập khi có mã bàn
       const token = localStorage.getItem('token')
       const userString = localStorage.getItem('user')
       if (!token || !userString) {
@@ -102,7 +94,6 @@ const CategoryPage = () => {
     }
   }, [qrCode, navigate, location.pathname]) // Chạy khi qrCode hoặc URL thay đổi
 
-  // --- LẤY DANH SÁCH SẢN PHẨM (ĐÃ SỬA: Thêm categoryId) ---
   const {
     data: products = [],
     isLoading,
@@ -121,7 +112,6 @@ const CategoryPage = () => {
           price: dish.price,
           image: dish.imageUrl,
           _id: dish._id,
-          // *** BẮT BUỘC PHẢI THÊM LẠI DÒNG NÀY ĐỂ FILTER HOẠT ĐỘNG ***
           categoryId: dish.category_id?._id || dish.category_id,
         }))
       }
@@ -129,7 +119,6 @@ const CategoryPage = () => {
     },
   })
 
-  // --- THÊM LẠI LOGIC LỌC SẢN PHẨM (TỪ CODE CŨ) ---
   const filteredProducts = useMemo(() => {
     let productsToFilter = products
 
@@ -153,28 +142,25 @@ const CategoryPage = () => {
   // --- Mutation (Giữ nguyên của bạn) ---
   const addToCartMutation = useMutation({
     mutationFn: (payload) => {
-      console.log('Gọi POST /cart/add-item:', payload)
       return http.post('/cart/add-item', payload)
     },
     onSuccess: (response, variables) => {
-      console.log('Thêm thành công!', response)
-      alert(`Đã thêm "${variables.dishName}" vào giỏ!`)
-      // "Rung chuông" cho Header
+      message.success(`Đã thêm "${variables.dishName}" vào giỏ!`)
       const { user_id: userId, table_id: tableId } = variables
       if (tableId && userId) {
         queryClient.invalidateQueries({ queryKey: ['cart', tableId, userId] })
       }
     },
     onError: (err, variables) => {
-      console.error(`Lỗi khi thêm '${variables.dishName}' vào giỏ:`, err)
+      message.error(`Lỗi khi thêm '${variables.dishName}' vào giỏ:`, err)
       if (err.response?.status === 401) {
-        alert('Vui lòng đăng nhập để thêm sản phẩm.')
+        message.success('Vui lòng đăng nhập để thêm sản phẩm.')
         navigate(
           `/flareon/login?redirect=${encodeURIComponent(location.pathname + location.search)}`
         )
       } else {
         const errMsg = err.response?.data?.message || 'Có lỗi xảy ra khi thêm vào giỏ.'
-        alert(errMsg)
+        message.error(errMsg)
       }
     },
   })
@@ -188,7 +174,7 @@ const CategoryPage = () => {
     try {
       const userString = localStorage.getItem('user')
       if (!userString) {
-        alert('Bạn cần đăng nhập để thêm vào giỏ hàng.')
+        message.warning('Bạn cần đăng nhập để thêm vào giỏ hàng.')
         navigate(`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`)
         return // Dừng hàm
       }
@@ -198,9 +184,8 @@ const CategoryPage = () => {
         throw new Error('User ID không hợp lệ sau khi parse.')
       }
     } catch (e) {
-      console.error('Lỗi khi lấy thông tin người dùng từ localStorage:', e)
-      alert('Lỗi khi lấy thông tin người dùng. Vui lòng thử đăng nhập lại.')
-      return // Dừng hàm nếu có lỗi
+      message.error('Lỗi khi lấy thông tin người dùng. Vui lòng thử đăng nhập lại.')
+      return
     }
 
     // 2. Lấy table_id từ localStorage
@@ -208,7 +193,7 @@ const CategoryPage = () => {
 
     // *** THÊM KIỂM TRA NẾU KHÔNG CÓ currentTableId ***
     if (!tableIdToSend) {
-      alert('Vui lòng quét mã QR tại bàn để chọn bàn trước khi thêm món.')
+      message.warning('Vui lòng quét mã QR tại bàn để chọn bàn trước khi thêm món.')
       console.log('Lỗi: Không tìm thấy currentTableId trong localStorage.')
       return // Dừng lại nếu không có bàn
     }

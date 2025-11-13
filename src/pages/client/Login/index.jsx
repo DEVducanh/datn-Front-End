@@ -1,12 +1,11 @@
 import React from 'react'
-import { Button, Input, Form, Typography, Divider, notification } from 'antd'
+import { Button, Input, Form, Typography, Divider, message } from 'antd'
 import { ArrowLeftOutlined } from '@ant-design/icons'
-
 import { useMutation } from '@tanstack/react-query'
 import authAPI from '@/apis/auth/auth.api'
-// 👈 1. IMPORT HOOK useAuth
 import { useAuth } from '@/contexts/AuthContext'
 import { useNavigate } from 'react-router'
+import { useMessage } from '@/contexts/MessageProvider'
 
 const { Title, Text, Link } = Typography
 
@@ -16,11 +15,9 @@ const GL_Logo = '/public/images/google.png'
 const Login = () => {
   const navigate = useNavigate()
   const [form] = Form.useForm()
-
-  // 👈 2. SỬ DỤNG useAuth ĐỂ LẤY HÀM login()
+  const message = useMessage()
   const { login } = useAuth()
 
-  // --- LOGIC GỌI API ĐĂNG NHẬP ---
   const loginMutation = useMutation({
     mutationFn: (payload) => authAPI.login(payload),
 
@@ -30,51 +27,26 @@ const Login = () => {
       const userObject = data.user
 
       if (token && userObject && userObject._id) {
-        // 💥 3. BỎ QUA VIỆC LƯU LOCAL STORAGE TRỰC TIẾP 💥
-        // Thay vào đó, gọi hàm login() từ Context.
-        // Hàm này sẽ tự động lưu Local Storage VÀ cập nhật trạng thái isLoggedIn = true.
         login(token, userObject)
 
-        notification.success({
-          message: 'Đăng nhập thành công! 🎉',
-          description: 'Chào mừng trở lại! Đang chuyển hướng...',
-          placement: 'topRight',
-        })
-
-        // Chuyển hướng về trang chủ
+        message.success('Đăng nhập thành công!')
         navigate('/')
       } else {
-        notification.error({
-          message: 'Lỗi Dữ liệu',
-          description: 'Phản hồi từ máy chủ không chứa token hoặc ID người dùng hợp lệ.',
-          placement: 'topRight',
-        })
+        message.error('Lỗi Dữ liệu')
       }
     },
-    // TRONG component Login, thay thế hàm onError này:
-    onError: (error) => {
-      // Log toàn bộ lỗi để kiểm tra cấu trúc
-      console.error('LỖI ĐĂNG NHẬP (CHI TIẾT):', error)
-      // Log nội dung phản hồi lỗi từ server
-      console.error('SERVER RESPONSE DATA:', error.response?.data) // <--- Lỗi chi tiết nằm ở đây
 
-      // Lấy thông báo lỗi từ server (thường là trường 'message' hoặc 'error')
+    onError: (error) => {
       const serverMessage =
         error.response?.data?.message ||
         error.response?.data?.error ||
         'Đăng nhập thất bại. Vui lòng kiểm tra email và mật khẩu.'
 
-      // Mã lỗi HTTP
       const serverStatus = error.response?.status
 
-      // Thiết lập thông báo hiển thị cho người dùng
       const message = serverMessage
 
-      notification.error({
-        message: `Lỗi Đăng nhập (${serverStatus || 'Lỗi Mạng/Client'})`,
-        description: message,
-        placement: 'topRight',
-      })
+      message.error(`Lỗi Đăng nhập (${serverStatus || 'Lỗi Mạng/Client'})`)
     },
   })
 

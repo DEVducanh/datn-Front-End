@@ -4,30 +4,24 @@ import { ArrowLeftOutlined } from '@ant-design/icons'
 import { useMutation } from '@tanstack/react-query'
 import authAPI from '@/apis/auth/auth.api'
 import { useNavigate } from 'react-router'
+import { useMessage } from '@/contexts/MessageProvider'
 
 const { Title, Text, Link } = Typography
 
-// Giả định đường dẫn logo đúng
 const FLAREON_LOGO = '/public/images/Logo.png'
 const GL_Logo = '/public/images/google.png'
 
 const Register = () => {
   const navigate = useNavigate()
+  const message = useMessage()
   const [form] = Form.useForm()
 
   const registerMutation = useMutation({
     mutationFn: (payload) => authAPI.register(payload),
 
     onSuccess: (data) => {
-      notification.success({
-        message: 'Đăng ký thành công! 🎉',
-        description: data.message || 'Vui lòng đăng nhập để tiếp tục.',
-        placement: 'topRight',
-      })
-
-      // === SỬA LỖI TẠI ĐÂY (ĐÃ CẬP NHẬT ĐƯỜNG DẪN ĐÚNG) ===
+      message.success('Đăng ký thành công!')
       navigate('/flareon/login')
-      // ===================================================
     },
 
     onError: (error) => {
@@ -41,15 +35,10 @@ const Register = () => {
       }
 
       console.error('Lỗi đăng ký:', error.response?.data)
-      notification.error({
-        message: 'Lỗi đăng ký',
-        description: displayMessage,
-        placement: 'topRight',
-      })
+      message.error('Lỗi đăng ký')
     },
   })
 
-  // Hàm xử lý sự kiện submit form
   const onFinish = (values) => {
     const payload = {
       username: values.username || values.name,
