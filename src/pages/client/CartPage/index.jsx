@@ -170,7 +170,6 @@ const CartPage = () => {
             items.length === 0 || updateQuantityMutation.isPending || removeItemMutation.isPending
           }
         >
-          {/* Thay đổi text nút nếu đang loading */}
           {updateQuantityMutation.isPending
             ? 'Đang cập nhật...'
             : removeItemMutation.isPending
