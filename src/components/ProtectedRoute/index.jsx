@@ -1,6 +1,6 @@
 import React from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useLocation } from 'react-router'
+import { Navigate, Outlet, useLocation } from 'react-router'
 
 // Protect routes that require authentication. If not logged in, redirect to /login
 export const ProtectedRoute = () => {

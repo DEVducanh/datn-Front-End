@@ -1,7 +1,6 @@
 import React from 'react'
 import { Button, Input, Form, Typography, Divider, notification } from 'antd'
 import { ArrowLeftOutlined } from '@ant-design/icons'
-
 import { useMutation } from '@tanstack/react-query'
 import authAPI from '@/apis/auth/auth.api'
 import { useNavigate } from 'react-router'

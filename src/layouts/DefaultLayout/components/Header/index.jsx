@@ -1,6 +1,5 @@
 // src/layouts/DefaultLayout/components/Header/index.jsx
-import React, { use, useState, useMemo } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import React, { useState, useMemo } from 'react'
 import { FlameKindling, Menu, X, Clock, ShoppingCart, User, Receipt, LogOut } from 'lucide-react' // Import các icon cần thiết
 import { Modal, List, Button, Badge, Avatar, Dropdown } from 'antd' // Import các component Antd
 import AntButton from '@/components/AntButton'
@@ -8,6 +7,8 @@ import { useQuery } from '@tanstack/react-query'
 import http from '@/apis/http'
 import { UserOutlined } from '@ant-design/icons'
 import { useAuth } from '@/contexts/AuthContext'
+import { NavLink } from 'react-router'
+import { useNavigate } from 'react-router'
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false)

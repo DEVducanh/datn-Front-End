@@ -8,7 +8,6 @@ import { AuthProvider } from './contexts/AuthContext'
 
 function App() {
   return (
-    // 👈 2. BỌC AppRoutes BẰNG AuthProvider
     <AuthProvider>
       <AppRoutes />
       <ToastContainer />

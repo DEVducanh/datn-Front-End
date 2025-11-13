@@ -5,7 +5,7 @@ import http from '@/apis/http'
 import { Input, Spin } from 'antd' // Thêm lại Input, Spin
 import { Search } from 'lucide-react' // Thêm lại Search icon
 import ProductGrid from '@/layouts/DefaultLayout/components/ProductGrid'
-import { useLocation, useNavigate } from 'react-router'
+import { useLocation, useNavigate, useParams } from 'react-router'
 // import Banner from '@/layouts/DefaultLayout/components/Banner' // Banner này không dùng nữa
 
 // --- ẢNH BANNER MỚI (TỪ CODE CŨ) ---
