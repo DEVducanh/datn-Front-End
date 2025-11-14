@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react'
-import { Card, Table, Button, Modal, Breadcrumb, message, Select, Spin, Input, Popconfirm } from 'antd'
+import { Card, Table, Button, Modal, Breadcrumb, message, Select, Spin, Popconfirm } from 'antd'
 import {
   DeleteOutlined,
   EyeOutlined
 } from '@ant-design/icons'
 
+// Giả sử đường dẫn API của bạn là đúng
 import tableAPI from '@/apis/table/table.api'
 import orderAPI from '@/apis/order/order'
 import userAPI from '@/apis/user/user.api'
 
+// Giả sử các component con này tồn tại trong cùng thư mục
 import PaymentDetail from './paymentDetail'
 import ShearchPayment from './shearchPayment'
 import FilterPayment from './filterPayment'
@@ -17,15 +19,15 @@ const { Option } = Select
 
 const PaymentAndBill = () => {
   const [tables, setTables] = useState([])
-  const [orders, setOrders] = useState([])
-  const [allOrders, setAllOrders] = useState([])
+  const [orders, setOrders] = useState([]) // Đơn hàng đã lọc để hiển thị
+  const [allOrders, setAllOrders] = useState([]) // Tất cả đơn hàng từ API
   const [usersMap, setUsersMap] = useState({})
   const [loadingTables, setLoadingTables] = useState(false)
   const [loadingOrders, setLoadingOrders] = useState(false)
   const [selectedTable, setSelectedTable] = useState(null)
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [detailOpen, setDetailOpen] = useState(false)
-  const [statusFilter, setStatusFilter] = useState(null)
+  const [statusFilter, setStatusFilter] = useState(null) // Dùng cho FilterPayment
 
   useEffect(() => {
     ; (async () => {
@@ -34,6 +36,8 @@ const PaymentAndBill = () => {
         await fetchTables()
         await fetchOrders(users)
       } catch (e) {
+        console.error("Lỗi khởi tạo trang:", e)
+        // Thử tải lại từng phần nếu có lỗi
         await fetchTables().catch(() => { })
         await fetchOrders({}).catch(() => { })
       }
@@ -82,10 +86,19 @@ const PaymentAndBill = () => {
         const customerName = o.customer || o.customer_name || (user && (user.name || user.fullName || user.username))
         return { ...o, customer: customerName || o.customer || o.customer_name || '-' }
       })
-      setAllOrders(merged)
+
+      setAllOrders(merged) // Lưu trữ tất cả đơn hàng
+
+      // Cập nhật hiển thị dựa trên bộ lọc hiện tại
+      let filteredOrders = merged
       if (selectedTable) {
-        setOrders(filterByTable(merged, selectedTable))
+        filteredOrders = filterByTable(filteredOrders, selectedTable)
       }
+      if (statusFilter) {
+        filteredOrders = filterByStatus(filteredOrders, statusFilter)
+      }
+      setOrders(filteredOrders) // Hiển thị tất cả nếu không có bàn nào được chọn
+
     } catch (err) {
       message.error('Tải danh sách đơn hàng thất bại')
     } finally {
@@ -93,17 +106,61 @@ const PaymentAndBill = () => {
     }
   }
 
+  // Hàm lọc theo Bàn
   const filterByTable = (ordersList, tableId) => {
-    if (!tableId) return []
+    if (!tableId) return ordersList // Trả về tất cả nếu không có tableId
     return (ordersList || []).filter(o => {
       const tid = o.table_id || (o.table && (o.table._id || o.table.id)) || o.tableId || o.table?.table_name || o.table_number
       return String(tid) === String(tableId)
     })
   }
 
+  // Hàm lọc theo Trạng thái
+  const filterByStatus = (ordersList, status) => {
+    if (!status) return ordersList // Trả về tất cả nếu không có status
+    return (ordersList || []).filter(o => String(o.status || '').toLowerCase() === String(status).toLowerCase())
+  }
+
+  // Hàm lọc theo Tìm kiếm
+  const filterBySearch = (ordersList, term) => {
+    const q = String(term || '').trim().toLowerCase()
+    if (!q) return ordersList // Trả về tất cả nếu không có tìm kiếm
+
+    return (ordersList || []).filter(o => {
+      const code = String(o.orderId || o.code || o._id || '').toLowerCase()
+      const customer = String(
+        o.customer
+        || o.customer_name
+        || o.user?.name
+        || o.user?.fullName
+        || o.user?.username
+        || ''
+      ).toLowerCase()
+      return code.includes(q) || customer.includes(q)
+    })
+  }
+
+  // Hàm tổng hợp tất cả các bộ lọc
+  const applyFilters = (filters) => {
+    const { table, status, search } = filters
+
+    let result = allOrders
+
+    result = filterByTable(result, table)
+    result = filterByStatus(result, status)
+    result = filterBySearch(result, search) // Giả sử handleSearch truyền vào `search`
+
+    setOrders(result)
+  }
+
+
   const onTableChange = (tableId) => {
     setSelectedTable(tableId)
-    const filtered = filterByTable(allOrders, tableId)
+    // Khi đổi bàn, lọc lại danh sách orders
+    let filtered = filterByTable(allOrders, tableId)
+    if (statusFilter) { // Áp dụng lại bộ lọc trạng thái
+      filtered = filterByStatus(filtered, statusFilter)
+    }
     setOrders(filtered)
   }
 
@@ -128,13 +185,17 @@ const PaymentAndBill = () => {
         await orderAPI.updateStatus(id, newStatus)
       } else if (orderAPI.update) {
         await orderAPI.update(id, { status: newStatus })
+      } else if (orderAPI.patch) {
+        await orderAPI.patch(id, { status: newStatus })
       } else {
-        await orderAPI.patch?.(id, { status: newStatus })
+        message.error("Không tìm thấy hàm API để cập nhật trạng thái")
+        return
       }
       message.success(isCurrentlyPaid ? 'Đã chuyển về Pending' : 'Cập nhật trạng thái: đã thanh toán')
-      await fetchOrders()
+      await fetchOrders(usersMap) // Tải lại tất cả đơn hàng
       setDetailOpen(false)
     } catch (err) {
+      console.error("Lỗi markPaid:", err)
       message.error('Cập nhật trạng thái thất bại')
     }
   }
@@ -152,16 +213,16 @@ const PaymentAndBill = () => {
         await orderAPI.delete(id)
       } else if (orderAPI.remove) {
         await orderAPI.remove(id)
-      } else if (orderAPI.update) {
+      } else if (orderAPI.update) { // Fallback to soft-delete
         await orderAPI.update(id, { status: 'Deleted' })
       } else if (orderAPI.patch) {
         await orderAPI.patch(id, { status: 'Deleted' })
       } else {
-        setAllOrders(prev => (prev || []).filter(o => (o._id || o.key || o.id) !== id))
-        setOrders(prev => (prev || []).filter(o => (o._id || o.key || o.id) !== id))
+        message.error("Không tìm thấy hàm API để xóa")
+        return
       }
       message.success('Xóa đơn hàng thành công')
-      await fetchOrders()
+      await fetchOrders(usersMap) // Tải lại tất cả đơn hàng
       setDetailOpen(false)
     } catch (err) {
       console.error(err)
@@ -171,46 +232,44 @@ const PaymentAndBill = () => {
 
   const handleSearch = (term) => {
     const q = String(term || '').trim().toLowerCase()
+
+    // Lọc dựa trên các bộ lọc khác
+    let base = allOrders
+    if (selectedTable) {
+      base = filterByTable(base, selectedTable)
+    }
+    if (statusFilter) {
+      base = filterByStatus(base, statusFilter)
+    }
+
     if (!q) {
-      setOrders(selectedTable ? filterByTable(allOrders, selectedTable) : (allOrders || []))
+      setOrders(base) // Nếu không tìm kiếm, trả về danh sách đã lọc
       return
     }
 
-    const filtered = (allOrders || []).filter(o => {
-      const code = String(o.orderId || o.code || o._id || '').toLowerCase()
-      const customer = String(
-        o.customer
-        || o.customer_name
-        || o.user?.name
-        || o.user?.fullName
-        || o.user?.username
-        || ''
-      ).toLowerCase()
-
-      return code.includes(q) || customer.includes(q)
-    })
-
-    // if a table is selected, also ensure results belong to that table
-    const result = selectedTable ? filterByTable(filtered, selectedTable) : filtered
-    setOrders(result)
+    const filtered = filterBySearch(base, q)
+    setOrders(filtered)
   }
 
   const handleFilterStatus = (status) => {
     setStatusFilter(status)
-    const base = selectedTable ? filterByTable(allOrders, selectedTable) : (allOrders || [])
-    if (!status) {
-      setOrders(base)
-      return
+
+    // Lọc dựa trên các bộ lọc khác
+    let base = allOrders
+    if (selectedTable) {
+      base = filterByTable(base, selectedTable)
     }
-    const filtered = (base || []).filter(o => String(o.status || '').toLowerCase() === String(status).toLowerCase())
+
+    const filtered = filterByStatus(base, status)
     setOrders(filtered)
+    // Cần chạy lại handleSearch nếu có nội dung tìm kiếm
   }
 
   const columns = [
     { title: 'Mã đơn', dataIndex: 'orderId', key: 'orderId', render: (_, r) => r.orderId || r.code || r._id?.slice(-8) || '-' },
     { title: 'Khách hàng', dataIndex: 'customer', key: 'customer', render: (_, r) => r.customer || r.customer_name || '-' },
     { title: 'Nhân viên', dataIndex: 'servedByName', key: 'servedByName', render: (_, r) => r.servedByName || r.servedBy || '-' },
-    { title: 'Thời gian', dataIndex: 'createdAt', key: 'createdAt', render: (v, r) => v || r?.createdAt || '-' },
+    { title: 'Thời gian', dataIndex: 'createdAt', key: 'createdAt', render: (v, r) => (v || r?.createdAt ? new Date(v || r.createdAt).toLocaleString('vi-VN') : '-') },
     { title: 'Trạng thái', dataIndex: 'status', key: 'status' },
     { title: 'Tổng (₫)', dataIndex: 'total', key: 'total', align: 'right', render: v => (v || 0).toLocaleString('vi-VN') },
 
@@ -260,7 +319,7 @@ const PaymentAndBill = () => {
                 justifyContent: 'center'
               }}
             />
-          </Popconfirm>
+            s        </Popconfirm>
         </div>
       )
     },
