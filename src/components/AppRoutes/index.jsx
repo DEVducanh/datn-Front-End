@@ -28,6 +28,7 @@ import StaffManagement from '@/pages/admin/StaffManagement'
 import UserManagement from '@/pages/admin/UserManagement'
 import ContactPage from '@/pages/client/Contact/ContactPage'
 import PaymentResult from '../PaymentResult'
+import InvoiceDetailPage from '@/pages/client/InvoiceDetail'
 
 const AppRoutes = () => {
   return (
@@ -52,6 +53,7 @@ const AppRoutes = () => {
         <Route path="category" element={<CategoryPage />} />
         <Route path="product/:id" element={<FoodDetailPage />} />
         <Route path="contact" element={<ContactPage />} />
+        <Route path="invoices/:id" element={<InvoiceDetailPage />} />
         <Route path="payment/result" element={<PaymentResult />} />
 
         <Route element={<ProtectedRoute />}>
