@@ -22,17 +22,18 @@ const OrderHistoryModal = ({ isOpen, onClose }) => {
     }
   }, [])
 
-  // Query để lấy lịch sử hóa đơn (chỉ chạy khi modal mở)
+  // Query để lấy lịch sử hóa đơn (chạy để lấy TẤT CẢ hóa đơn)
   const {
-    data: completedInvoices = [],
+    data: allInvoices = [], // ⭐ CHỖ SỬA 1: Đổi tên biến thành allInvoices
     isLoading,
     isError,
     error,
   } = useQuery({
-    queryKey: ['invoices', userId, 'completed'],
+    // ⭐ CHỖ SỬA 2: Đặt queryKey chung hơn vì ta luôn fetch tất cả
+    queryKey: ['invoices', 'all'],
     queryFn: async () => {
-      if (!userId) return []
-      const res = await http.get(`/invoices?status=completed`)
+      // ⭐ CHỖ SỬA 3: CHỈ GỌI ENDPOINT CƠ SỞ (vì backend không hỗ trợ lọc)
+      const res = await http.get(`/invoices`)
 
       // Xử lý các cấu trúc API khác nhau
       if (res && res.data && Array.isArray(res.data.data)) return res.data.data
@@ -41,10 +42,26 @@ const OrderHistoryModal = ({ isOpen, onClose }) => {
 
       return []
     },
-    enabled: isOpen && !!userId, // Chỉ chạy khi modal mở và có userId
+    // ⭐ CHỖ SỬA 4: Chỉ chạy khi modal mở.
+    enabled: isOpen,
     staleTime: 1000 * 60 * 5,
     refetchOnWindowFocus: false,
   })
+
+  // ⭐ CHỖ SỬA 5: THỰC HIỆN LỌC DỮ LIỆU Ở FRONTEND BẰNG useMemo
+  const completedInvoices = useMemo(() => {
+    if (!allInvoices || !userId) return []
+
+    return allInvoices.filter((invoice) => {
+      // Lọc theo userId (đảm bảo userId khớp với user_id._id trong invoice)
+      const isCurrentUser = invoice.user_id && invoice.user_id._id === userId
+
+      // Lọc theo trạng thái PAID (sử dụng chữ thường để khớp với API data: "paid")
+      const isPaid = invoice.status === 'paid'
+
+      return isCurrentUser && isPaid
+    })
+  }, [allInvoices, userId]) // Chạy lại khi danh sách hóa đơn hoặc userId thay đổi
 
   // Hàm chuyển đến trang chi tiết
   const openOrderDetail = (invoice) => {
@@ -73,6 +90,7 @@ const OrderHistoryModal = ({ isOpen, onClose }) => {
       )
     }
 
+    // Kiểm tra mảng đã lọc
     if (completedInvoices.length === 0) {
       return (
         <div className="flex justify-center items-center h-48">
@@ -84,10 +102,11 @@ const OrderHistoryModal = ({ isOpen, onClose }) => {
     // Giao diện List ĐÃ THIẾT KẾ LẠI
     return (
       <List
-        dataSource={completedInvoices}
+        dataSource={completedInvoices} // ⭐ SỬ DỤNG MẢNG ĐÃ LỌC
         renderItem={(invoice) => {
           const order = invoice.order_id || {}
-          const tableName = order.table_id?.name || 'Bàn không xác định'
+          // Sử dụng table_name từ object table_id
+          const tableName = invoice.table_id?.table_name || 'Bàn không xác định'
           const date = new Date(invoice.createdAt || Date.now()).toLocaleDateString('vi-VN')
 
           return (

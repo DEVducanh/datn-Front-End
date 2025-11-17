@@ -28,8 +28,9 @@ const InvoiceDetailPage = () => {
     queryFn: async () => {
       const res = await http.get(`/invoices/${invoiceId}`)
       console.log('API /invoices/ trả về (res):', res)
-      if (res?.data) return res.data
-      if (res?._id) return res
+      // Xử lý data nằm trong res.data hoặc res trực tiếp
+      const responseData = res?.data || res
+      if (responseData && responseData._id) return responseData
       throw new Error('Không tìm thấy dữ liệu hóa đơn.')
     },
     enabled: !!invoiceId,
@@ -66,6 +67,7 @@ const InvoiceDetailPage = () => {
           description={error?.message || 'Không thể tải hóa đơn. Vui lòng thử lại.'}
           showIcon
         />
+        <p className="text-sm mt-2 text-gray-500">Chi tiết lỗi: {error?.message}</p>
       </div>
     )
   }
@@ -78,9 +80,9 @@ const InvoiceDetailPage = () => {
   }
 
   // (Phần chuẩn bị data )
-  const orderId = invoice.order_id?._id || invoice.order_id
-  const tableName = invoice.order_id?.table_id?.name || 'Bàn không xác định'
-  const createdDate = new Date(invoice.createdAt || Date.now()).toLocaleString('vi-VN')
+  // Cập nhật cách lấy thông tin từ cấu trúc API mới
+  const tableName = invoice.table?.name || 'Bàn không xác định'
+  const createdDate = new Date(invoice.created_at || Date.now()).toLocaleString('vi-VN')
 
   return (
     <div className="bg-gray-50 py-12 px-4 min-h-screen">
@@ -100,7 +102,7 @@ const InvoiceDetailPage = () => {
           </div>
           <div>
             <p className="text-sm text-gray-600">Phương thức TT:</p>
-            <p className="font-semibold">{invoice.payment_method || 'Chưa rõ'}</p>
+            <p className="font-semibold">{invoice.payment?.method || 'Chưa rõ'}</p>
           </div>
           <div className="text-right">
             <p className="text-sm text-gray-600">Trạng thái:</p>
@@ -109,8 +111,14 @@ const InvoiceDetailPage = () => {
         </div>
         <h2 className="text-xl font-semibold mb-4 text-orange-600">Chi tiết đơn hàng</h2>
 
-        {orderId ? (
-          <OrderItemsList orderId={orderId} onOpenReview={handleOpenReviewModal} />
+        {/* ⭐ CHỖ SỬA LỖI CÚ PHÁP: Đảm bảo component được đóng đúng cú pháp */}
+        {invoice.order_item && Array.isArray(invoice.order_item) ? (
+          <OrderItemsList
+            orderItemsData={invoice.order_item}
+            // Sử dụng ID HÓA ĐƠN làm orderId để tránh nhầm lẫn khi đánh giá
+            orderId={invoice._id}
+            onOpenReview={handleOpenReviewModal}
+          />
         ) : (
           <p className="text-gray-500">Không tìm thấy mã đơn hàng liên kết.</p>
         )}

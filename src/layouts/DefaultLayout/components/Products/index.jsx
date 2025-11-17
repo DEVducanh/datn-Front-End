@@ -5,10 +5,11 @@ import { Eye, Star, Clock } from 'lucide-react'
 import { Tag, Button } from 'antd' // Giữ lại import của Ant Design
 import { useNavigate } from 'react-router'
 
-const Products = () => {
+// ⭐ CHỖ SỬA 1: Nhận prop 'limit'
+const Products = ({ limit }) => {
   const navigate = useNavigate()
   const {
-    data: products = [],
+    data: productsData = [], // Đổi tên biến để chứa dữ liệu thô từ API
     isLoading,
     error,
     isError,
@@ -53,6 +54,16 @@ const Products = () => {
       </section>
     )
   }
+
+  // ⭐ CHỖ SỬA 2: Áp dụng logic giới hạn (Slicing)
+  const allProducts = productsData
+
+  // Logic cắt mảng: Nếu 'limit' tồn tại, cắt mảng. Ngược lại, giữ nguyên toàn bộ mảng.
+  const productsToDisplay =
+    limit && allProducts.length > limit
+      ? allProducts.slice(0, limit) // Cắt mảng (ví dụ: lấy 10 món đầu tiên)
+      : allProducts // Hiển thị tất cả (nếu limit là undefined hoặc không hợp lệ)
+
   const handleViewDetails = (productId) => {
     console.log('Chuyển đến chi tiết sản phẩm:', productId)
     navigate(`product/${productId}`) // Chuyển trang
@@ -74,10 +85,11 @@ const Products = () => {
 
           {/* Grid hiển thị sản phẩm */}
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {products.length === 0 ? (
+            {productsToDisplay.length === 0 ? (
               <p className="col-span-full text-center text-gray-500">Không có sản phẩm nào.</p>
             ) : (
-              products.map((product) => (
+              // ⭐ CHỖ SỬA 3: Đảm bảo cú pháp JSX ternary operator đúng
+              productsToDisplay.map((product) => (
                 <div
                   key={product.id} // Dùng id đã map
                   className="group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-2xl transition-all duration-300 border border-gray-100 hover:border-orange-200"
@@ -96,7 +108,6 @@ const Products = () => {
                       <Tag variant="outline" className="text-orange-500 border-orange-300">
                         {product.category || 'N/A'}
                       </Tag>
-                      {/* Có thể thêm tag isPopular nếu cần */}
                     </div>
 
                     {/* Tên sản phẩm */}
