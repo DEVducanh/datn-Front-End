@@ -25,17 +25,17 @@ const PaymentResult = () => {
 
   useEffect(() => {
     const handleVNPayReturn = async () => {
-      // (Việc kiểm tra 'unpaid' này có thể không cần thiết nữa vì BE sẽ xử lý,
-      // nhưng giữ lại cũng không sao)
+      // Lấy thông tin hóa đơn hiện tại để kiểm tra trạng thái
       const invoices = await axios.get(
         `https://api-datn-orderfood-backend-2.onrender.com/invoices/${txnRef}`
       )
 
       if (invoices?.data?.data?.status === 'unpaid') {
         if (responseCode === '00') {
-          try { 
+          try {
+            // Gọi API xác nhận thanh toán thành công
             const result = await axios.get(
-              'https://api-datn-orderfood-backend-2.onrender.com/invoices/vnpay-return', // 👈 ĐÃ SỬA
+              'https://api-datn-orderfood-backend-2.onrender.com/invoices/vnpay-return',
               {
                 params: {
                   vnp_TxnRef: txnRef,
@@ -53,10 +53,7 @@ const PaymentResult = () => {
                 }
               }
             )
-   
-            console.log('Thanh toán thành công, đang xóa currentTableId...')
-            localStorage.removeItem('currentTableId')
-
+            console.log('Kết quả:', result.data)
           } catch (error) {
             console.error('Lỗi gọi API:', error)
           }
@@ -65,7 +62,7 @@ const PaymentResult = () => {
         }
       } else {
         console.log('Hóa đơn đã được xử lý trước đó, bỏ qua.')
-        if (responseCode === '00') { // ‼️ ĐÃ XÓA CHỮ 't' BỊ LỖI CÚ PHÁP ‼️
+        if (responseCode === '00') {
           localStorage.removeItem('currentTableId')
         }
       }
@@ -89,6 +86,7 @@ const PaymentResult = () => {
   const handleGoHome = () => {
     navigate('/flareon')
   }
+
   return (
     <div
       style={{
@@ -98,7 +96,6 @@ const PaymentResult = () => {
         minHeight: '100vh',
         background: 'linear-gradient(135deg, #e0f7fa, #ffffff)',
         padding: '20px'
-
       }}
     >
       <Result
@@ -131,11 +128,13 @@ const PaymentResult = () => {
           style={{ marginTop: 20, borderRadius: 8 }}
         >
           <Descriptions.Item label="Hóa đơn">{txnRef}</Descriptions.Item>
-          s         <Descriptions.Item label="Số tiền">
+
+          <Descriptions.Item label="Số tiền">
             <span style={{ fontWeight: 'bold' }}>
               {(Number(amount) / 100).toLocaleString('vi-VN')} ₫
             </span>
           </Descriptions.Item>
+
           <Descriptions.Item label="Trạng thái">
             {responseCode === '00' ? (
               <span style={{ color: '#52c41a', fontWeight: 'bold' }}>Thành công</span>
