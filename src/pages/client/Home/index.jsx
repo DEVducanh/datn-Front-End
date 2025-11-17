@@ -1,31 +1,14 @@
-import React, { useEffect } from 'react' // Thêm useEffect
+import React from 'react' // Xóa useEffect
 import Categories from '@/layouts/DefaultLayout/components/Categories'
 import Features from '@/layouts/DefaultLayout/components/Features'
 import Hero from '@/layouts/DefaultLayout/components/Hero'
 import Products from '@/layouts/DefaultLayout/components/Products'
-import { useLocation, useNavigate } from 'react-router'
+// Xóa useLocation, useNavigate
 
 const Home = () => {
-  const location = useLocation() // Để đọc URL hiện tại
-  const navigate = useNavigate() // Để thay đổi URL
+  // === XÓA TOÀN BỘ ĐOẠN CODE useEffect TỪ ĐÂY ===
 
-  useEffect(() => {
-    const searchParams = new URLSearchParams(location.search)
-    const tableIdFromUrl = searchParams.get('table_id')
-
-    if (tableIdFromUrl) {
-      localStorage.setItem('currentTableId', tableIdFromUrl)
-
-      searchParams.delete('table_id')
-      navigate(
-        {
-          pathname: location.pathname,
-          search: searchParams.toString(),
-        },
-        { replace: true } // 'replace' để không tạo thêm lịch sử trình duyệt
-      )
-    }
-  }, [location, navigate]) // Chạy lại mỗi khi URL thay đổi
+  // === KẾT THÚC PHẦN XÓA ===
 
   return (
     <>

@@ -25,14 +25,17 @@ const PaymentResult = () => {
 
   useEffect(() => {
     const handleVNPayReturn = async () => {
+      // (Việc kiểm tra 'unpaid' này có thể không cần thiết nữa vì BE sẽ xử lý,
+      // nhưng giữ lại cũng không sao)
       const invoices = await axios.get(
         `https://api-datn-orderfood-backend-2.onrender.com/invoices/${txnRef}`
       )
-      if (invoices?.data?.data?.status == 'unpaid') {
+
+      if (invoices?.data?.data?.status === 'unpaid') {
         if (responseCode === '00') {
-          try {
+          try { 
             const result = await axios.get(
-              'https://api-datn-orderfood-backend-2.onrender.com/payment/vnpay-return',
+              'https://api-datn-orderfood-backend-2.onrender.com/invoices/vnpay-return', // 👈 ĐÃ SỬA
               {
                 params: {
                   vnp_TxnRef: txnRef,
@@ -46,20 +49,42 @@ const PaymentResult = () => {
                   vnp_TmnCode: TmnCode,
                   vnp_TransactionStatus: TransactionStatus,
                   vnp_TransactionNo: TransactionNo,
-                  vnp_BankTranNo: BankTranNo,
-                },
+                  vnp_BankTranNo: BankTranNo
+                }
               }
             )
+   
+            console.log('Thanh toán thành công, đang xóa currentTableId...')
+            localStorage.removeItem('currentTableId')
+
           } catch (error) {
             console.error('Lỗi gọi API:', error)
           }
         } else {
           console.log('Thanh toán thất bại hoặc bị hủy.')
         }
+      } else {
+        console.log('Hóa đơn đã được xử lý trước đó, bỏ qua.')
+        if (responseCode === '00') { // ‼️ ĐÃ XÓA CHỮ 't' BỊ LỖI CÚ PHÁP ‼️
+          localStorage.removeItem('currentTableId')
+        }
       }
     }
     handleVNPayReturn()
-  }, [responseCode, txnRef])
+  }, [
+    responseCode,
+    txnRef,
+    secureHash,
+    amount,
+    bankCode,
+    CardType,
+    OrderInfo,
+    PayDate,
+    TmnCode,
+    TransactionStatus,
+    TransactionNo,
+    BankTranNo
+  ])
 
   const handleGoHome = () => {
     navigate('/flareon')
@@ -72,7 +97,8 @@ const PaymentResult = () => {
         alignItems: 'center',
         minHeight: '100vh',
         background: 'linear-gradient(135deg, #e0f7fa, #ffffff)',
-        padding: '20px',
+        padding: '20px'
+
       }}
     >
       <Result
@@ -88,14 +114,14 @@ const PaymentResult = () => {
         extra={[
           <Button type="primary" key="home" onClick={handleGoHome}>
             Quay về trang chủ
-          </Button>,
+          </Button>
         ]}
         style={{
           width: '100%',
           maxWidth: 600,
           borderRadius: 16,
           boxShadow: '0 12px 24px rgba(0,0,0,0.15)',
-          background: '#fff',
+          background: '#fff'
         }}
       >
         <Descriptions
@@ -105,7 +131,7 @@ const PaymentResult = () => {
           style={{ marginTop: 20, borderRadius: 8 }}
         >
           <Descriptions.Item label="Hóa đơn">{txnRef}</Descriptions.Item>
-          <Descriptions.Item label="Số tiền">
+          s         <Descriptions.Item label="Số tiền">
             <span style={{ fontWeight: 'bold' }}>
               {(Number(amount) / 100).toLocaleString('vi-VN')} ₫
             </span>

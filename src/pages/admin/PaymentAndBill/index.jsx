@@ -1,13 +1,14 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react'
-import { Card, Table, Button, Modal, Breadcrumb, message, Select, Spin, Input, Popconfirm } from 'antd'
+import React, { useEffect, useState } from 'react'
+import { Card, Table, Button, Modal, Breadcrumb, message, Select, Spin, Popconfirm } from 'antd'
 import {
   // ⚠️ LOẠI BỎ DeleteOutlined
   EyeOutlined
 } from '@ant-design/icons'
 
-import invoiceAPI from '@/apis/invoice/invoice.api'
+import tableAPI from '@/apis/table/table.api'
 import orderAPI from '@/apis/order/order'
 
+// Giả sử các component con này tồn tại trong cùng thư mục
 import PaymentDetail from './paymentDetail'
 import ShearchPayment from './shearchPayment'
 import FilterPayment from './filterPayment'
@@ -15,22 +16,31 @@ import FilterPayment from './filterPayment'
 const { Option } = Select
 
 const PaymentAndBill = () => {
-  const [orders, setOrders] = useState([])
-  const [allOrders, setAllOrders] = useState([])
-  const [tableNamesMap, setTableNamesMap] = useState({})
+  const [tables, setTables] = useState([])
+  const [orders, setOrders] = useState([]) // Đơn hàng đã lọc để hiển thị
+  const [allOrders, setAllOrders] = useState([]) // Tất cả đơn hàng từ API
+  const [usersMap, setUsersMap] = useState({})
+  const [loadingTables, setLoadingTables] = useState(false)
   const [loadingOrders, setLoadingOrders] = useState(false)
   const [loadingDetail, setLoadingDetail] = useState(false) // 💡 Thêm loading cho chi tiết
   const [selectedTable, setSelectedTable] = useState(null)
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [detailOpen, setDetailOpen] = useState(false)
-  const [statusFilter, setStatusFilter] = useState(null)
+  const [statusFilter, setStatusFilter] = useState(null) // Dùng cho FilterPayment
 
-  const filterByTable = useCallback((ordersList, tableId) => {
-    if (!tableId) return ordersList
-    return (ordersList || []).filter(o => {
-      const invoiceTableId = o.table_id?._id || o.table_id
-      return String(invoiceTableId) === String(tableId)
-    })
+  useEffect(() => {
+    ; (async () => {
+      try {
+        const users = await fetchUsers()
+        await fetchTables()
+        await fetchOrders(users)
+      } catch (e) {
+        console.error("Lỗi khởi tạo trang:", e)
+        // Thử tải lại từng phần nếu có lỗi
+        await fetchTables().catch(() => { })
+        await fetchOrders({}).catch(() => { })
+      }
+    })()
   }, [])
 
   const fetchInvoices = async () => {
@@ -55,22 +65,18 @@ const PaymentAndBill = () => {
         }
       })
 
-      const map = {}
-      merged.forEach(o => {
-        const id = o.table_id?._id || o.table_id
-        const name = o.table_id?.table_name || 'Bàn Khác'
-        if (id) {
-          map[String(id)] = { id: id, name: name }
-        }
-      })
-      setTableNamesMap(map)
+      setAllOrders(merged) // Lưu trữ tất cả đơn hàng
 
-      setAllOrders(merged)
+      // Cập nhật hiển thị dựa trên bộ lọc hiện tại
+      let filteredOrders = merged
       if (selectedTable) {
-        setOrders(filterByTable(merged, selectedTable))
-      } else {
-        setOrders(merged)
+        filteredOrders = filterByTable(filteredOrders, selectedTable)
       }
+      if (statusFilter) {
+        filteredOrders = filterByStatus(filteredOrders, statusFilter)
+      }
+      setOrders(filteredOrders) // Hiển thị tất cả nếu không có bàn nào được chọn
+
     } catch (err) {
       message.error('Tải danh sách hóa đơn thất bại')
     } finally {
@@ -78,13 +84,61 @@ const PaymentAndBill = () => {
     }
   }
 
-  useEffect(() => {
-    fetchInvoices()
-  }, [])
+  // Hàm lọc theo Bàn
+  const filterByTable = (ordersList, tableId) => {
+    if (!tableId) return ordersList // Trả về tất cả nếu không có tableId
+    return (ordersList || []).filter(o => {
+      const tid = o.table_id || (o.table && (o.table._id || o.table.id)) || o.tableId || o.table?.table_name || o.table_number
+      return String(tid) === String(tableId)
+    })
+  }
+
+  // Hàm lọc theo Trạng thái
+  const filterByStatus = (ordersList, status) => {
+    if (!status) return ordersList // Trả về tất cả nếu không có status
+    return (ordersList || []).filter(o => String(o.status || '').toLowerCase() === String(status).toLowerCase())
+  }
+
+  // Hàm lọc theo Tìm kiếm
+  const filterBySearch = (ordersList, term) => {
+    const q = String(term || '').trim().toLowerCase()
+    if (!q) return ordersList // Trả về tất cả nếu không có tìm kiếm
+
+    return (ordersList || []).filter(o => {
+      const code = String(o.orderId || o.code || o._id || '').toLowerCase()
+      const customer = String(
+        o.customer
+        || o.customer_name
+        || o.user?.name
+        || o.user?.fullName
+        || o.user?.username
+        || ''
+      ).toLowerCase()
+      return code.includes(q) || customer.includes(q)
+    })
+  }
+
+  // Hàm tổng hợp tất cả các bộ lọc
+  const applyFilters = (filters) => {
+    const { table, status, search } = filters
+
+    let result = allOrders
+
+    result = filterByTable(result, table)
+    result = filterByStatus(result, status)
+    result = filterBySearch(result, search) // Giả sử handleSearch truyền vào `search`
+
+    setOrders(result)
+  }
+
 
   const onTableChange = (tableId) => {
     setSelectedTable(tableId)
-    const filtered = filterByTable(allOrders, tableId)
+    // Khi đổi bàn, lọc lại danh sách orders
+    let filtered = filterByTable(allOrders, tableId)
+    if (statusFilter) { // Áp dụng lại bộ lọc trạng thái
+      filtered = filterByStatus(filtered, statusFilter)
+    }
     setOrders(filtered)
   }
 
@@ -145,53 +199,78 @@ const PaymentAndBill = () => {
         await orderAPI.updateStatus(id, newStatus)
       } else if (orderAPI.update) {
         await orderAPI.update(id, { status: newStatus })
+      } else if (orderAPI.patch) {
+        await orderAPI.patch(id, { status: newStatus })
       } else {
-        await orderAPI.patch?.(id, { status: newStatus })
+        message.error("Không tìm thấy hàm API để cập nhật trạng thái")
+        return
       }
-      message.success(isCurrentlyPaid ? 'Đã chuyển về Unpaid' : 'Cập nhật trạng thái: đã thanh toán')
-      await fetchInvoices()
+      message.success(isCurrentlyPaid ? 'Đã chuyển về Pending' : 'Cập nhật trạng thái: đã thanh toán')
+      await fetchOrders(usersMap) // Tải lại tất cả đơn hàng
       setDetailOpen(false)
     } catch (err) {
+      console.error("Lỗi markPaid:", err)
       message.error('Cập nhật trạng thái thất bại')
     }
   }
 
-
-  // ⚠️ LOẠI BỎ HÀM handleDelete
-  // const handleDelete = async (order) => { ... }
-
+    try {
+      if (orderAPI.delete) {
+        await orderAPI.delete(id)
+      } else if (orderAPI.remove) {
+        await orderAPI.remove(id)
+      } else if (orderAPI.update) { // Fallback to soft-delete
+        await orderAPI.update(id, { status: 'Deleted' })
+      } else if (orderAPI.patch) {
+        await orderAPI.patch(id, { status: 'Deleted' })
+      } else {
+        message.error("Không tìm thấy hàm API để xóa")
+        return
+      }
+      message.success('Xóa đơn hàng thành công')
+      await fetchOrders(usersMap) // Tải lại tất cả đơn hàng
+      setDetailOpen(false)
+    } catch (err) {
+      console.error(err)
+      message.error('Xóa thất bại')
+    }
+  }
 
   const handleSearch = (term) => {
     // Giữ nguyên logic handleSearch
     const q = String(term || '').trim().toLowerCase()
+
+    // Lọc dựa trên các bộ lọc khác
+    let base = allOrders
+    if (selectedTable) {
+      base = filterByTable(base, selectedTable)
+    }
+    if (statusFilter) {
+      base = filterByStatus(base, statusFilter)
+    }
+
     if (!q) {
-      setOrders(selectedTable ? filterByTable(allOrders, selectedTable) : (allOrders || []))
+      setOrders(base) // Nếu không tìm kiếm, trả về danh sách đã lọc
       return
     }
 
-    const filtered = (allOrders || []).filter(o => {
-      const code = String(o.orderId || o.code || o._id || '').toLowerCase()
-      const customer = String(
-        o.customer || ''
-      ).toLowerCase()
-
-      return code.includes(q) || customer.includes(q)
-    })
-
-    const result = selectedTable ? filterByTable(filtered, selectedTable) : filtered
-    setOrders(result)
+    const filtered = filterBySearch(base, q)
+    setOrders(filtered)
   }
 
   const handleFilterStatus = (status) => {
     // Giữ nguyên logic handleFilterStatus
     setStatusFilter(status)
-    const base = selectedTable ? filterByTable(allOrders, selectedTable) : (allOrders || [])
-    if (!status) {
-      setOrders(base)
-      return
+
+    // Lọc dựa trên các bộ lọc khác
+    let base = allOrders
+    if (selectedTable) {
+      base = filterByTable(base, selectedTable)
     }
-    const filtered = (base || []).filter(o => String(o.status || '').toLowerCase() === String(status).toLowerCase())
+
+    const filtered = filterByStatus(base, status)
     setOrders(filtered)
+    // Cần chạy lại handleSearch nếu có nội dung tìm kiếm
   }
 
   const columns = [
@@ -199,7 +278,7 @@ const PaymentAndBill = () => {
     { title: 'Bàn', dataIndex: 'tableName', key: 'tableName' },
     { title: 'Khách hàng', dataIndex: 'customer', key: 'customer', render: (v) => v || '-' },
     { title: 'Nhân viên', dataIndex: 'servedByName', key: 'servedByName', render: (_, r) => r.servedByName || r.servedBy || '-' },
-    { title: 'Thời gian', dataIndex: 'created_at', key: 'created_at', render: (v) => v ? new Date(v).toLocaleTimeString() + ' ' + new Date(v).toLocaleDateString() : '-' },
+    { title: 'Thời gian', dataIndex: 'createdAt', key: 'createdAt', render: (v, r) => (v || r?.createdAt ? new Date(v || r.createdAt).toLocaleString('vi-VN') : '-') },
     { title: 'Trạng thái', dataIndex: 'status', key: 'status' },
     { title: 'Tổng (₫)', dataIndex: 'total', key: 'total', align: 'right', render: v => (v || 0).toLocaleString('vi-VN') },
     {
@@ -226,7 +305,30 @@ const PaymentAndBill = () => {
             }}
           />
 
-          {/* ⚠️ NÚT XÓA ĐÃ BỊ LOẠI BỎ */}
+          <Popconfirm
+            title="Bạn có chắc chắn muốn xóa đơn hàng này?"
+            onConfirm={() => handleDelete(record)}
+            okText="Có"
+            cancelText="Không"
+          >
+            <Button
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              style={{
+                borderRadius: 8,
+                background: '#fff',
+                border: '1px solid #ff4d4f',
+                color: '#ff4d4f',
+                padding: 6,
+                height: 36,
+                width: 36,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            />
+            s        </Popconfirm>
         </div>
       )
     },
