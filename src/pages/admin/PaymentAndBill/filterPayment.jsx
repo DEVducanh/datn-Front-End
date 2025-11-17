@@ -4,7 +4,7 @@ import { FilterOutlined } from '@ant-design/icons'
 
 const { Option } = Select
 
-const STATUS_OPTIONS = ['Pending', 'Processing', 'Shipped', 'Completed', 'Cancelled']
+const STATUS_OPTIONS = ['unpaid', 'paid']
 
 const FilterPayment = ({ value, onChange, style, allowClear = true, placeholder = 'Lọc theo trạng thái' }) => {
     return (
