@@ -1,7 +1,5 @@
-// src/pages/client/CartPage/components/CartItem.jsx
 import React from 'react'
 
-// Nhận props item (dữ liệu món ăn) và các hàm xử lý từ CartPage
 const CartItem = ({ item, onIncrease, onDecrease, onRemove }) => {
   // Nếu không có dữ liệu item thì không render gì cả
   if (!item) {
@@ -9,7 +7,6 @@ const CartItem = ({ item, onIncrease, onDecrease, onRemove }) => {
   }
 
   return (
-    // Thẻ bao ngoài cho mỗi món hàng
     <div className="flex items-center p-4 bg-white rounded-lg shadow-sm mb-3">
       {/* Ảnh sản phẩm */}
       <img

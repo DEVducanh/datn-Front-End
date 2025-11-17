@@ -33,11 +33,7 @@ const PaymentResult = () => {
 
       if (invoices?.data?.data?.status === 'unpaid') {
         if (responseCode === '00') {
-          try { // ‼️ ĐÃ XÓA CHỮ 'S' BỊ LỖI CÚ PHÁP ‼️
-            // ‼️ ========================================== ‼️
-            // ‼️ BƯỚC 1: SỬA LẠI API ĐƯỢC GỌI ‼️
-            // ‼️ Sửa từ '/payment/vnpay-return' thành '/invoices/vnpay-return'
-            // ‼️ ========================================== ‼️
+          try { 
             const result = await axios.get(
               'https://api-datn-orderfood-backend-2.onrender.com/invoices/vnpay-return', // 👈 ĐÃ SỬA
               {
@@ -57,14 +53,10 @@ const PaymentResult = () => {
                 }
               }
             )
-            console.log('Kết quả (BE đã tự cập nhật bàn):', result.data)
-
-            // ‼️ BƯỚC 2: (ĐÃ XÓA) ‼️
-            // Xóa API thứ 2 (axios.patch) vì BE đã tự làm.
-
-            // BƯỚC 3: Xóa localStorage
+   
             console.log('Thanh toán thành công, đang xóa currentTableId...')
             localStorage.removeItem('currentTableId')
+
           } catch (error) {
             console.error('Lỗi gọi API:', error)
           }
