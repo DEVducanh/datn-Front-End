@@ -59,11 +59,11 @@ const OrderPage = () => {
       async onOk() {
         if (!currentUserId || !tableId) {
           messageApi.error('Lỗi: Không tìm thấy thông tin người dùng hoặc bàn.')
-          return;
+          return
         }
 
         try {
-          const BASE_URL = 'https://api-datn-orderfood-backend-2.onrender.com';
+          const BASE_URL = 'https://api-datn-orderfood-backend-2.onrender.com'
 
           // GỌI API PATCH /orders/{id}/cancel
           // Nếu API thành công (trả về 2xx), code sẽ tiếp tục chạy
@@ -73,12 +73,11 @@ const OrderPage = () => {
           // Đây là hành động được thực hiện ngay sau khi API trả về 2xx
           messageApi.success(`Đơn hàng #${orderId.slice(-8)} đã được hủy thành công!`)
 
-          setOrders(prevOrders =>
-            prevOrders.map(order =>
+          setOrders((prevOrders) =>
+            prevOrders.map((order) =>
               order._id === orderId ? { ...order, status: 'Cancelled' } : order
             )
-          );
-
+          )
         } catch (error) {
           // Lỗi chỉ xảy ra khi API trả về 4xx hoặc 5xx (tức là HỦY ĐƠN THỰC SỰ THẤT BẠI)
           console.error('Lỗi API khi hủy đơn hàng:', error)

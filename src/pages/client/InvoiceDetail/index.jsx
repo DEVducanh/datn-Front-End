@@ -1,23 +1,17 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import http from '@/apis/http'
-import { Spin, Alert } from 'antd'
+import { Spin, Alert, Button, Tag, Table } from 'antd'
+import { Star, ImageOff } from 'lucide-react' // Thêm icon ảnh lỗi
 import ReviewModal from '@/layouts/DefaultLayout/components/ReviewModal'
-import OrderItemsList from '@/layouts/DefaultLayout/components/OrderItemsList'
 
-// Hàm format tiền
-const formatVnd = (n) => (n || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + 'đ'
-
-// --- COMPONENT TRANG CHÍNH ---
 const InvoiceDetailPage = () => {
   const { id: invoiceId } = useParams()
-
-  // State quản lý Modal
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [selectedDish, setSelectedDish] = useState(null) // { dishId, orderId, dishName }
+  const [selectedDish, setSelectedDish] = useState(null)
 
-  // 1. GỌI API 1: Lấy chi tiết Hóa đơn (Giữ nguyên)
+  // 1. GỌI API
   const {
     data: invoice,
     isLoading,
@@ -27,112 +21,210 @@ const InvoiceDetailPage = () => {
     queryKey: ['invoice', invoiceId],
     queryFn: async () => {
       const res = await http.get(`/invoices/${invoiceId}`)
-      console.log('API /invoices/ trả về (res):', res)
-      // Xử lý data nằm trong res.data hoặc res trực tiếp
-      const responseData = res?.data || res
-      if (responseData && responseData._id) return responseData
+      if (res?.data) return res.data
+      if (res?._id) return res
       throw new Error('Không tìm thấy dữ liệu hóa đơn.')
     },
     enabled: !!invoiceId,
     staleTime: 1000 * 60 * 5,
   })
 
-  // Hàm mở Modal (truyền xuống OrderItemsList)
   const handleOpenReviewModal = (dishId, orderId, dishName) => {
     setSelectedDish({ dishId, orderId, dishName })
     setIsModalOpen(true)
   }
 
-  // Hàm đóng Modal (truyền xuống ReviewModal)
   const handleCloseModal = () => {
     setIsModalOpen(false)
     setSelectedDish(null)
   }
 
-  // (Phần Loading / Error / Empty của API 1 giữ nguyên)
-  if (isLoading) {
+  // --- KHU VỰC SỬA LOGIC LẤY DỮ LIỆU ---
+  const { tableName, allItems } = useMemo(() => {
+    if (!invoice) return { tableName: '...', allItems: [] }
+
+    let items = []
+    let tName = 'Mang về / Khác'
+
+    // 1. Lấy tên bàn
+    if (invoice.table) {
+      tName = invoice.table.name || invoice.table
+    } else if (invoice.table_id) {
+      tName = invoice.table_id.name || invoice.table_id
+    }
+
+    // 2. LOGIC LẤY MÓN ĂN
+    if (invoice.order_item && Array.isArray(invoice.order_item) && invoice.order_item.length > 0) {
+      items = invoice.order_item.map((item) => ({
+        ...item,
+        // Fake ID nếu thiếu để tránh lỗi key của React
+        _id: item._id || Math.random().toString(36).substr(2, 9),
+        order_id_ref: Array.isArray(invoice.order_id) ? invoice.order_id[0] : invoice.order_id,
+      }))
+    } else if (invoice.order_id) {
+      const rawOrder = invoice.order_id
+      const extractItems = (ord) => ord.items || ord.dishes || ord.products || ord.order_items || []
+
+      if (Array.isArray(rawOrder)) {
+        if (rawOrder[0]?.table_id?.name) tName = rawOrder[0].table_id.name
+        items = rawOrder.flatMap((order) => extractItems(order))
+      } else if (typeof rawOrder === 'object') {
+        if (rawOrder.table_id?.name) tName = rawOrder.table_id.name
+        items = extractItems(rawOrder)
+      }
+    }
+
+    return { tableName: tName, allItems: items }
+  }, [invoice])
+
+  // --- CẤU HÌNH CỘT (ĐÃ SỬA ĐỂ HIỆN TÊN BẰNG MỌI GIÁ) ---
+  const columns = [
+    {
+      title: 'Tên món',
+      key: 'name', // Bỏ dataIndex để lấy toàn bộ record
+      render: (_, record) => {
+        // 1. Tìm tên món ở mọi ngóc ngách
+        let name = record.name || record.dish_name || record.title // Tìm trực tiếp
+        if (!name && record.dish_id && typeof record.dish_id === 'object') {
+          name = record.dish_id.name || record.dish_id.dish_name // Tìm trong dish_id object
+        }
+
+        // 2. Tìm ảnh tương tự
+        let image = record.image || record.dish_image
+        if (!image && record.dish_id && typeof record.dish_id === 'object') {
+          image = record.dish_id.image || record.dish_id.imageUrl
+        }
+        // Fallback nếu vẫn không thấy tên
+        const displayName = name || 'Món ăn (Không tên)'
+
+        return (
+          <div className="flex items-center gap-3">
+            <span className="font-medium text-gray-800">{name}</span>
+          </div>
+        )
+      },
+    },
+    {
+      title: 'SL',
+      dataIndex: 'quantity',
+      key: 'quantity',
+      align: 'center',
+      width: 60,
+      render: (q) => <span className="font-bold text-gray-600">x{q || 1}</span>,
+    },
+    {
+      title: 'Giá',
+      dataIndex: 'price',
+      key: 'price',
+      align: 'right',
+      render: (price) => <span className="text-gray-600">{(price || 0).toLocaleString()}đ</span>,
+    },
+    {
+      title: 'Thành tiền',
+      key: 'total',
+      align: 'right',
+      render: (_, record) => (
+        <span className="font-bold text-orange-600">
+          {((record.price || 0) * (record.quantity || 0)).toLocaleString()}đ
+        </span>
+      ),
+    },
+    {
+      title: '',
+      key: 'action',
+      align: 'right',
+      width: 100,
+      render: (_, record) => {
+        // Logic tìm tên để truyền vào modal đánh giá
+        let dishName = record.name || record.dish_name
+        let dishId = record.dish_id
+
+        // Xử lý nếu dish_id là object
+        if (typeof dishId === 'object' && dishId !== null) {
+          dishName = dishName || dishId.name
+          dishId = dishId._id
+        }
+
+        return (
+          <Button
+            type="text"
+            icon={<Star size={16} className="text-yellow-500" />}
+            className="text-yellow-600 hover:bg-yellow-50"
+            onClick={() => handleOpenReviewModal(dishId, record.order_id_ref, dishName || 'Món ăn')}
+          >
+            Đánh giá
+          </Button>
+        )
+      },
+    },
+  ]
+
+  if (isLoading)
     return (
-      <div className="flex justify-center items-center min-h-[50vh]">
+      <div className="flex justify-center p-12">
         <Spin size="large" />
-        <p className="ml-4 text-lg">Đang tải chi tiết hóa đơn...</p>
       </div>
     )
-  }
-  if (isError) {
-    return (
-      <div className="max-w-4xl mx-auto p-4 my-8">
-        <Alert
-          type="error"
-          message="Lỗi"
-          description={error?.message || 'Không thể tải hóa đơn. Vui lòng thử lại.'}
-          showIcon
-        />
-        <p className="text-sm mt-2 text-gray-500">Chi tiết lỗi: {error?.message}</p>
-      </div>
-    )
-  }
-  if (!invoice) {
-    return (
-      <div className="max-w-4xl mx-auto p-4 my-8">
-        <Alert type="warning" message="Không tìm thấy hóa đơn" showIcon />
-      </div>
-    )
-  }
+  if (isError) return <Alert message="Lỗi tải hóa đơn" type="error" className="m-8" />
+  if (!invoice) return <Alert message="Không tìm thấy hóa đơn" type="warning" className="m-8" />
 
-  // (Phần chuẩn bị data )
-  // Cập nhật cách lấy thông tin từ cấu trúc API mới
-  const tableName = invoice.table?.name || 'Bàn không xác định'
-  const createdDate = new Date(invoice.created_at || Date.now()).toLocaleString('vi-VN')
-
+  const createdDate = new Date(invoice.createdAt || Date.now()).toLocaleString('vi-VN')
+  const paymentMethod = invoice.payment?.method || 'Chưa rõ'
   return (
-    <div className="bg-gray-50 py-12 px-4 min-h-screen">
+    <div className="bg-gray-50 py-8 px-4 min-h-screen">
       <div className="max-w-3xl mx-auto p-8 bg-white shadow-lg rounded-lg border">
-        <h1 className="text-3xl font-bold text-center mb-2 text-gray-800">Chi tiết Hóa đơn</h1>
-        <p className="text-center text-gray-500 text-sm mb-6">
-          Mã HĐ: <span className="font-mono">{invoice._id}</span>
-        </p>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-2 mb-6 pb-6 border-b">
+        <div className="text-center mb-8">
+          <h1 className="text-2xl font-bold text-gray-800 uppercase">Chi tiết Hóa đơn</h1>
+          <p className="text-gray-400 text-xs mt-1">ID: {invoice._id}</p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 text-sm mb-8 bg-gray-50 p-4 rounded-lg border border-gray-100">
           <div>
-            <p className="text-sm text-gray-600">Ngày tạo:</p>
-            <p className="font-semibold">{createdDate}</p>
+            <p className="text-gray-500">Ngày tạo:</p>
+            <p className="font-semibold text-gray-800">{createdDate}</p>
           </div>
           <div className="text-right">
-            <p className="text-sm text-gray-600">Bàn:</p>
-            <p className="font-semibold">{tableName}</p>
+            <p className="text-gray-500">Vị trí:</p>
+            <p className="font-semibold text-gray-800">{tableName}</p>
           </div>
           <div>
-            <p className="text-sm text-gray-600">Phương thức TT:</p>
-            <p className="font-semibold">{invoice.payment?.method || 'Chưa rõ'}</p>
+            <p className="text-gray-500">Thanh toán:</p>
+            <p className="font-semibold text-gray-800">{paymentMethod}</p>
           </div>
           <div className="text-right">
-            <p className="text-sm text-gray-600">Trạng thái:</p>
-            <p className="font-semibold text-green-600 uppercase">{invoice.status || 'PAID'}</p>
+            <p className="text-gray-500">Trạng thái:</p>
+            <Tag
+              color={
+                invoice.status === 'paid' || invoice.status === 'completed' ? 'success' : 'warning'
+              }
+            >
+              {(invoice.status || 'UNPAID').toUpperCase()}
+            </Tag>
           </div>
         </div>
-        <h2 className="text-xl font-semibold mb-4 text-orange-600">Chi tiết đơn hàng</h2>
 
-        {/* ⭐ CHỖ SỬA LỖI CÚ PHÁP: Đảm bảo component được đóng đúng cú pháp */}
-        {invoice.order_item && Array.isArray(invoice.order_item) ? (
-          <OrderItemsList
-            orderItemsData={invoice.order_item}
-            // Sử dụng ID HÓA ĐƠN làm orderId để tránh nhầm lẫn khi đánh giá
-            orderId={invoice._id}
-            onOpenReview={handleOpenReviewModal}
-          />
-        ) : (
-          <p className="text-gray-500">Không tìm thấy mã đơn hàng liên kết.</p>
-        )}
+        <h2 className="text-lg font-semibold mb-4 text-orange-600 border-l-4 border-orange-500 pl-3">
+          Danh sách món ăn ({allItems.length})
+        </h2>
 
-        {/* (Phần tổng kết tiền ) */}
-        <div className="mt-6 pt-6 border-t-2 border-dashed">
-          <div className="flex justify-between items-center text-3xl font-bold text-red-600">
-            <span>Tổng cộng:</span>
-            <span>{formatVnd(invoice.total_amount)}</span>
-          </div>
+        <Table
+          dataSource={allItems}
+          columns={columns}
+          rowKey={(record) => record._id || Math.random()}
+          pagination={false}
+          size="small"
+          bordered
+          className="mb-6"
+          locale={{ emptyText: 'Không có dữ liệu món ăn' }}
+        />
+
+        <div className="flex justify-between items-center pt-4 border-t border-dashed border-gray-300">
+          <span className="text-gray-600 font-medium text-lg">Tổng cộng thanh toán:</span>
+          <span className="text-3xl font-bold text-red-600">
+            {invoice.total_amount?.toLocaleString()}đ
+          </span>
         </div>
       </div>
-
-      {/* --- Gọi Component ReviewModal --- */}
       <ReviewModal isOpen={isModalOpen} onClose={handleCloseModal} selectedDish={selectedDish} />
     </div>
   )

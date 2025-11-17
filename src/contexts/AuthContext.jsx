@@ -52,6 +52,7 @@ export const AuthProvider = ({ children }) => {
   // Hàm Đăng xuất: Xóa token và cập nhật trạng thái
   const logout = () => {
     console.log('ĐÃ CLICK ĐĂNG XUẤT!')
+    localStorage.removeItem('currentTableId')
     localStorage.removeItem('userToken')
     localStorage.removeItem('user') // Xóa cả data người dùng
     setIsLoggedIn(false)
