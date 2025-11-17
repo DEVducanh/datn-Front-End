@@ -85,7 +85,6 @@ const PaymentAndBill = () => {
       setOrders(result)
 
     } catch (err) {
-      console.error(err)
       message.error('Tải danh sách hóa đơn thất bại')
     } finally {
       setLoadingOrders(false)
@@ -182,6 +181,7 @@ const PaymentAndBill = () => {
   }
 
   const handleFilterStatus = (status) => {
+    // Giữ nguyên logic handleFilterStatus
     setStatusFilter(status)
     let base = allOrders
     if (selectedTable) {
@@ -207,7 +207,7 @@ const PaymentAndBill = () => {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
           <Button
             size="small"
-            onClick={() => openDetail(record)}
+            onClick={() => openDetail(record)} // Gọi hàm fetch chi tiết
             icon={<EyeOutlined />}
             loading={selectedOrder?._id === record._id && loadingDetail}
             style={{

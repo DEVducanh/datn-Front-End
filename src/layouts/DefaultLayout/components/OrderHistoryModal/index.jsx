@@ -4,8 +4,6 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Receipt, ChevronRight } from 'lucide-react'
 
-// Import API đã sửa (Bạn hãy kiểm tra lại đường dẫn import cho đúng với cấu trúc folder của bạn)
-// Nếu file api nằm ở src/apis/invoice/invoice.api.js thì dùng dòng dưới:
 import invoiceAPI from '@/apis/invoice/invoice.api'
 
 // Hàm format tiền
@@ -36,15 +34,11 @@ const OrderHistoryModal = ({ isOpen, onClose }) => {
 
     queryFn: async () => {
       if (!userId) return []
-
-      // --- ĐOẠN CODE ĐÃ SỬA ---
-      // Gọi qua invoiceAPI và truyền tham số lọc
-      // Backend thường dùng key là 'user_id' hoặc 'userId', ở đây tôi để 'user_id'
       const res = await invoiceAPI.getAll({
         status: 'completed',
         user_id: userId // Lọc theo ID người dùng
       })
-      // ------------------------
+     
 
       // Xử lý các cấu trúc API khác nhau trả về
       if (res && res.data && Array.isArray(res.data.data)) return res.data.data

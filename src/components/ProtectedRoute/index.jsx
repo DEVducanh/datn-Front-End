@@ -1,6 +1,6 @@
 import React from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useLocation, Navigate, Outlet } from 'react-router-dom'
+import { useLocation, Navigate, Outlet } from 'react-router' // <-- ĐÃ THÊM Navigate VÀ Outlet
 
 export const ProtectedRoute = () => {
   const { isLoggedIn } = useAuth()
