@@ -1,17 +1,15 @@
 import React from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useLocation, Navigate, Outlet } from 'react-router' // <-- ĐÃ THÊM Navigate VÀ Outlet
+import { useLocation, Navigate, Outlet } from 'react-router-dom'
 
-// Protect routes that require authentication. If not logged in, redirect to /login
 export const ProtectedRoute = () => {
   const { isLoggedIn } = useAuth()
   const location = useLocation()
 
   if (!isLoggedIn) {
-    // Preserve the attempted URL in state so the app can redirect after login
-    return <Navigate to="/flareon/login" replace state={{ from: location }} /> // <-- Cập nhật lại link login
+    // Chuyển hướng về trang login (đã sửa thành /flareon/login cho khớp với dự án)
+    return <Navigate to="/flareon/login" replace state={{ from: location }} />
   }
-
   return <Outlet />
 }
 
@@ -20,7 +18,8 @@ export const AuthRedirect = () => {
   const { isLoggedIn } = useAuth()
 
   if (isLoggedIn) {
-    return <Navigate to="/flareon" replace /> // <-- Cập nhật lại link trang chủ
+    // Nếu đã đăng nhập thì đẩy về trang chủ /flareon
+    return <Navigate to="/flareon" replace />
   }
 
   return <Outlet />

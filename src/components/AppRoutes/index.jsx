@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router'
+import { Routes, Route, Navigate } from 'react-router'
 
 import AdminLayout from '@/layouts/AdminLayout'
 import DefaultLayout from '@/layouts/DefaultLayout'
@@ -28,46 +28,45 @@ import StaffManagement from '@/pages/admin/StaffManagement'
 import UserManagement from '@/pages/admin/UserManagement'
 import ContactPage from '@/pages/client/Contact/ContactPage'
 import PaymentResult from '../PaymentResult'
+import InvoiceDetailPage from '@/pages/client/InvoiceDetail'
 
 const AppRoutes = () => {
   return (
-    // LƯU Ý QUAN TRỌNG: Component này phải nằm trong <AuthProvider> ở file App.jsx
-    <BrowserRouter>
-      <Routes>
-        {/* Admin layout pages */}
-        <Route path="/" element={<Navigate to="/flareon" replace />} />
-        <Route path="/admin" element={<AdminLayout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="categories" element={<CategoryManagement />} />
-          <Route path="dishes" element={<DishManagement />} />
-          <Route path="tables" element={<TableManagement />} />
-          <Route path="orders" element={<OrderManagement />} />
-          <Route path="payment-and-billing" element={<PaymentAndBill />} />
-          <Route path="reviews" element={<ReviewManagement />} />
-          <Route path="staffs" element={<StaffManagement />} />
-          <Route path="users" element={<UserManagement />} />
+    <Routes>
+      {/* Admin layout pages */}
+      <Route path="/" element={<Navigate to="/flareon" replace />} />
+      <Route path="/admin" element={<AdminLayout />}>
+        <Route index element={<Dashboard />} />
+        <Route path="categories" element={<CategoryManagement />} />
+        <Route path="dishes" element={<DishManagement />} />
+        <Route path="tables" element={<TableManagement />} />
+        <Route path="orders" element={<OrderManagement />} />
+        <Route path="payment-and-billing" element={<PaymentAndBill />} />
+        <Route path="reviews" element={<ReviewManagement />} />
+        <Route path="staffs" element={<StaffManagement />} />
+        <Route path="users" element={<UserManagement />} />
+      </Route>
+
+      <Route path="/flareon" element={<DefaultLayout />}>
+        <Route index element={<Home />} />
+        <Route path="about" element={<AboutPage />} />
+        <Route path="category" element={<CategoryPage />} />
+        <Route path="product/:id" element={<FoodDetailPage />} />
+        <Route path="contact" element={<ContactPage />} />
+        <Route path="invoices/:id" element={<InvoiceDetailPage />} />
+        <Route path="payment/result" element={<PaymentResult />} />
+
+        <Route element={<ProtectedRoute />}>
+          <Route path="cart" element={<CartPage />} />
+          <Route path="orders" element={<OrderPage />} />
         </Route>
 
-        <Route path="/flareon" element={<DefaultLayout />}>
-          <Route index element={<Home />} />
-          <Route path="about" element={<AboutPage />} />
-          <Route path="category" element={<CategoryPage />} />
-          <Route path="product/:id" element={<FoodDetailPage />} />
-          <Route path="contact" element={<ContactPage />} />
-          <Route path="payment/result" element={<PaymentResult />} />
-
-          <Route element={<ProtectedRoute />}>
-            <Route path="cart" element={<CartPage />} />
-            <Route path="orders" element={<OrderPage />} />
-          </Route>
-
-          <Route element={<AuthRedirect />}>
-            <Route path="login" element={<Login />} />
-            <Route path="register" element={<Register />} />
-          </Route>
+        <Route element={<AuthRedirect />}>
+          <Route path="login" element={<Login />} />
+          <Route path="register" element={<Register />} />
         </Route>
-      </Routes>
-    </BrowserRouter>
+      </Route>
+    </Routes>
   )
 }
 

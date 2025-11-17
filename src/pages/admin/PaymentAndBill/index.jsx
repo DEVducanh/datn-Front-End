@@ -1,14 +1,9 @@
-import React, { useEffect, useState } from 'react'
-import { Card, Table, Button, Modal, Breadcrumb, message, Select, Spin, Popconfirm } from 'antd'
-import {
-  DeleteOutlined,
-  EyeOutlined
-} from '@ant-design/icons'
+import React, { useEffect, useState, useCallback, useMemo } from 'react'
+import { Card, Table, Button, Modal, Breadcrumb, message, Select, Spin, Input } from 'antd'
+import { EyeOutlined } from '@ant-design/icons'
 
-// Giả sử đường dẫn API của bạn là đúng
-import tableAPI from '@/apis/table/table.api'
+import invoiceAPI from '@/apis/invoice/invoice.api'
 import orderAPI from '@/apis/order/order'
-import userAPI from '@/apis/user/user.api'
 
 // Giả sử các component con này tồn tại trong cùng thư mục
 import PaymentDetail from './paymentDetail'
@@ -18,167 +13,134 @@ import FilterPayment from './filterPayment'
 const { Option } = Select
 
 const PaymentAndBill = () => {
-  const [tables, setTables] = useState([])
-  const [orders, setOrders] = useState([]) // Đơn hàng đã lọc để hiển thị
-  const [allOrders, setAllOrders] = useState([]) // Tất cả đơn hàng từ API
-  const [usersMap, setUsersMap] = useState({})
-  const [loadingTables, setLoadingTables] = useState(false)
+  const [orders, setOrders] = useState([])
+  const [allOrders, setAllOrders] = useState([])
+  const [tableNamesMap, setTableNamesMap] = useState({})
+
   const [loadingOrders, setLoadingOrders] = useState(false)
+  const [loadingDetail, setLoadingDetail] = useState(false)
   const [selectedTable, setSelectedTable] = useState(null)
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [detailOpen, setDetailOpen] = useState(false)
-  const [statusFilter, setStatusFilter] = useState(null) // Dùng cho FilterPayment
+  const [statusFilter, setStatusFilter] = useState(null)
 
-  useEffect(() => {
-    ; (async () => {
-      try {
-        const users = await fetchUsers()
-        await fetchTables()
-        await fetchOrders(users)
-      } catch (e) {
-        console.error("Lỗi khởi tạo trang:", e)
-        // Thử tải lại từng phần nếu có lỗi
-        await fetchTables().catch(() => { })
-        await fetchOrders({}).catch(() => { })
-      }
-    })()
+  // Hàm lọc theo Bàn (Sử dụng useCallback để tối ưu)
+  const filterByTable = useCallback((ordersList, tableId) => {
+    if (!tableId) return ordersList
+    return (ordersList || []).filter(o => {
+      const invoiceTableId = o.table_id?._id || o.table_id
+      return String(invoiceTableId) === String(tableId)
+    })
   }, [])
 
-  const fetchUsers = async () => {
-    try {
-      const res = await userAPI.getAll()
-      const users = res?.data?.data || res?.data || []
-      const map = {}
-      users.forEach(u => {
-        const id = u._id || u.id || u.user_id
-        if (id) map[String(id)] = u
-      })
-      setUsersMap(map)
-      return map
-    } catch (err) {
-      console.warn('fetchUsers failed', err)
-      return {}
-    }
+  // Hàm lọc theo Trạng thái
+  const filterByStatus = (ordersList, status) => {
+    if (!status) return ordersList
+    return (ordersList || []).filter(o => String(o.status || '').toLowerCase() === String(status).toLowerCase())
   }
 
-  const fetchTables = async () => {
-    setLoadingTables(true)
-    try {
-      const res = await tableAPI.getAll()
-      const data = res?.data?.data || res?.data || []
-      setTables(data)
-    } catch (err) {
-      message.error('Tải danh sách bàn thất bại')
-    } finally {
-      setLoadingTables(false)
-    }
-  }
-
-  const fetchOrders = async (users = {}) => {
+  const fetchInvoices = async () => {
     setLoadingOrders(true)
     try {
-      const res = await orderAPI.getAll()
-      const data = res?.data?.data || res?.data || []
-      const usersLookup = Object.keys(users).length ? users : usersMap || {}
+      const res = await invoiceAPI.getAll()
+      const data = res?.data || []
+
       const merged = (data || []).map(o => {
-        const uid = o.user_id || o.customer_id || (o.user && (o.user._id || o.user.id)) || o.user
-        const user = uid ? usersLookup[String(uid)] : null
-        const customerName = o.customer || o.customer_name || (user && (user.name || user.fullName || user.username))
-        return { ...o, customer: customerName || o.customer || o.customer_name || '-' }
+        const customerName = o.user_id?.username || '-'
+        const tableName = o.table_id?.table_name || 'N/A'
+        const totalAmount = o.total_amount || o.total || 0
+        const orderId = o._id?.slice(-8) || '-'
+
+        return {
+          ...o,
+          customer: customerName,
+          total: totalAmount,
+          orderId: orderId,
+          tableName: tableName,
+          table_id: o.table_id
+        }
       })
 
-      setAllOrders(merged) // Lưu trữ tất cả đơn hàng
+      // Tạo map danh sách bàn để hiển thị dropdown
+      const map = {}
+      merged.forEach(o => {
+        const id = o.table_id?._id || o.table_id
+        const name = o.table_id?.table_name || 'Bàn Khác'
+        if (id) {
+          map[String(id)] = { id: id, name: name }
+        }
+      })
+      setTableNamesMap(map)
 
-      // Cập nhật hiển thị dựa trên bộ lọc hiện tại
-      let filteredOrders = merged
+      setAllOrders(merged)
+
+      // Áp dụng bộ lọc hiện tại
+      let result = merged
       if (selectedTable) {
-        filteredOrders = filterByTable(filteredOrders, selectedTable)
+        result = filterByTable(result, selectedTable)
       }
       if (statusFilter) {
-        filteredOrders = filterByStatus(filteredOrders, statusFilter)
+        result = filterByStatus(result, statusFilter)
       }
-      setOrders(filteredOrders) // Hiển thị tất cả nếu không có bàn nào được chọn
+      setOrders(result)
 
     } catch (err) {
-      message.error('Tải danh sách đơn hàng thất bại')
+      console.error(err)
+      message.error('Tải danh sách hóa đơn thất bại')
     } finally {
       setLoadingOrders(false)
     }
   }
 
-  // Hàm lọc theo Bàn
-  const filterByTable = (ordersList, tableId) => {
-    if (!tableId) return ordersList // Trả về tất cả nếu không có tableId
-    return (ordersList || []).filter(o => {
-      const tid = o.table_id || (o.table && (o.table._id || o.table.id)) || o.tableId || o.table?.table_name || o.table_number
-      return String(tid) === String(tableId)
-    })
-  }
-
-  // Hàm lọc theo Trạng thái
-  const filterByStatus = (ordersList, status) => {
-    if (!status) return ordersList // Trả về tất cả nếu không có status
-    return (ordersList || []).filter(o => String(o.status || '').toLowerCase() === String(status).toLowerCase())
-  }
-
-  // Hàm lọc theo Tìm kiếm
-  const filterBySearch = (ordersList, term) => {
-    const q = String(term || '').trim().toLowerCase()
-    if (!q) return ordersList // Trả về tất cả nếu không có tìm kiếm
-
-    return (ordersList || []).filter(o => {
-      const code = String(o.orderId || o.code || o._id || '').toLowerCase()
-      const customer = String(
-        o.customer
-        || o.customer_name
-        || o.user?.name
-        || o.user?.fullName
-        || o.user?.username
-        || ''
-      ).toLowerCase()
-      return code.includes(q) || customer.includes(q)
-    })
-  }
-
-  // Hàm tổng hợp tất cả các bộ lọc
-  const applyFilters = (filters) => {
-    const { table, status, search } = filters
-
-    let result = allOrders
-
-    result = filterByTable(result, table)
-    result = filterByStatus(result, status)
-    result = filterBySearch(result, search) // Giả sử handleSearch truyền vào `search`
-
-    setOrders(result)
-  }
-
+  useEffect(() => {
+    fetchInvoices()
+  }, [])
 
   const onTableChange = (tableId) => {
     setSelectedTable(tableId)
-    // Khi đổi bàn, lọc lại danh sách orders
     let filtered = filterByTable(allOrders, tableId)
-    if (statusFilter) { // Áp dụng lại bộ lọc trạng thái
+    if (statusFilter) {
       filtered = filterByStatus(filtered, statusFilter)
     }
     setOrders(filtered)
   }
 
-  const openDetail = (order) => {
-    setSelectedOrder(order)
-    setDetailOpen(true)
+  const fetchDetailAndOpenModal = async (invoiceSummary) => {
+    const id = invoiceSummary._id || invoiceSummary.id
+    if (!id) {
+      message.error('Không tìm thấy ID hóa đơn.')
+      return
+    }
+
+    setLoadingDetail(true)
+    try {
+      const res = await invoiceAPI.getById(id)
+      const detailedData = res?.data || res
+      setSelectedOrder({
+        ...invoiceSummary,
+        ...detailedData
+      })
+      setDetailOpen(true)
+    } catch (err) {
+      message.error('Tải chi tiết hóa đơn thất bại.')
+    } finally {
+      setLoadingDetail(false)
+    }
   }
 
+  // Alias cho hàm mở chi tiết
+  const openDetail = fetchDetailAndOpenModal
+
   const markPaid = async (order) => {
-    const id = order._id || order.id || order.order_id || order.key
+    const id = order._id || order.id || order.order_id || order.key || order
     if (!id) {
-      message.error('Không xác định được ID đơn hàng')
+      message.error('Không xác định được ID hóa đơn')
       return
     }
 
     const current = order.status || ''
     const isCurrentlyPaid = ['paid', 'Paid', 'completed', 'Completed', 'done', 'Done'].includes(String(current))
-    const newStatus = isCurrentlyPaid ? 'Pending' : 'Completed'
+    const newStatus = isCurrentlyPaid ? 'unpaid' : 'paid'
 
     try {
       if (orderAPI.updateStatus) {
@@ -191,8 +153,8 @@ const PaymentAndBill = () => {
         message.error("Không tìm thấy hàm API để cập nhật trạng thái")
         return
       }
-      message.success(isCurrentlyPaid ? 'Đã chuyển về Pending' : 'Cập nhật trạng thái: đã thanh toán')
-      await fetchOrders(usersMap) // Tải lại tất cả đơn hàng
+      message.success(isCurrentlyPaid ? 'Đã chuyển về Unpaid' : 'Cập nhật trạng thái: đã thanh toán')
+      await fetchInvoices()
       setDetailOpen(false)
     } catch (err) {
       console.error("Lỗi markPaid:", err)
@@ -200,79 +162,43 @@ const PaymentAndBill = () => {
     }
   }
 
-
-  const handleDelete = async (order) => {
-    const id = order._id || order.id || order.order_id || order.key
-    if (!id) {
-      message.error('Không xác định được ID đơn hàng')
-      return
-    }
-
-    try {
-      if (orderAPI.delete) {
-        await orderAPI.delete(id)
-      } else if (orderAPI.remove) {
-        await orderAPI.remove(id)
-      } else if (orderAPI.update) { // Fallback to soft-delete
-        await orderAPI.update(id, { status: 'Deleted' })
-      } else if (orderAPI.patch) {
-        await orderAPI.patch(id, { status: 'Deleted' })
-      } else {
-        message.error("Không tìm thấy hàm API để xóa")
-        return
-      }
-      message.success('Xóa đơn hàng thành công')
-      await fetchOrders(usersMap) // Tải lại tất cả đơn hàng
-      setDetailOpen(false)
-    } catch (err) {
-      console.error(err)
-      message.error('Xóa thất bại')
-    }
-  }
-
   const handleSearch = (term) => {
     const q = String(term || '').trim().toLowerCase()
 
-    // Lọc dựa trên các bộ lọc khác
-    let base = allOrders
-    if (selectedTable) {
-      base = filterByTable(base, selectedTable)
-    }
-    if (statusFilter) {
-      base = filterByStatus(base, statusFilter)
-    }
+    // Lọc dựa trên danh sách gốc (allOrders)
+    const filtered = (allOrders || []).filter(o => {
+      const code = String(o.orderId || o.code || o._id || '').toLowerCase()
+      const customer = String(o.customer || '').toLowerCase()
+      return code.includes(q) || customer.includes(q)
+    })
 
-    if (!q) {
-      setOrders(base) // Nếu không tìm kiếm, trả về danh sách đã lọc
-      return
-    }
+    // Áp dụng thêm filter bàn nếu có
+    const result = selectedTable ? filterByTable(filtered, selectedTable) : filtered
 
-    const filtered = filterBySearch(base, q)
-    setOrders(filtered)
+    // Áp dụng thêm filter status nếu có
+    const finalResult = statusFilter ? filterByStatus(result, statusFilter) : result
+
+    setOrders(finalResult)
   }
 
   const handleFilterStatus = (status) => {
     setStatusFilter(status)
-
-    // Lọc dựa trên các bộ lọc khác
     let base = allOrders
     if (selectedTable) {
       base = filterByTable(base, selectedTable)
     }
-
     const filtered = filterByStatus(base, status)
     setOrders(filtered)
-    // Cần chạy lại handleSearch nếu có nội dung tìm kiếm
   }
 
   const columns = [
-    { title: 'Mã đơn', dataIndex: 'orderId', key: 'orderId', render: (_, r) => r.orderId || r.code || r._id?.slice(-8) || '-' },
-    { title: 'Khách hàng', dataIndex: 'customer', key: 'customer', render: (_, r) => r.customer || r.customer_name || '-' },
+    { title: 'Mã đơn', dataIndex: 'orderId', key: 'orderId', render: (v) => v || '-' },
+    { title: 'Bàn', dataIndex: 'tableName', key: 'tableName' },
+    { title: 'Khách hàng', dataIndex: 'customer', key: 'customer', render: (v) => v || '-' },
     { title: 'Nhân viên', dataIndex: 'servedByName', key: 'servedByName', render: (_, r) => r.servedByName || r.servedBy || '-' },
-    { title: 'Thời gian', dataIndex: 'createdAt', key: 'createdAt', render: (v, r) => (v || r?.createdAt ? new Date(v || r.createdAt).toLocaleString('vi-VN') : '-') },
+    { title: 'Thời gian', dataIndex: 'created_at', key: 'created_at', render: (v) => v ? new Date(v).toLocaleTimeString() + ' ' + new Date(v).toLocaleDateString() : '-' },
     { title: 'Trạng thái', dataIndex: 'status', key: 'status' },
     { title: 'Tổng (₫)', dataIndex: 'total', key: 'total', align: 'right', render: v => (v || 0).toLocaleString('vi-VN') },
-
     {
       title: () => <div style={{ textAlign: 'center' }}>Hành động</div>,
       key: 'action',
@@ -283,6 +209,7 @@ const PaymentAndBill = () => {
             size="small"
             onClick={() => openDetail(record)}
             icon={<EyeOutlined />}
+            loading={selectedOrder?._id === record._id && loadingDetail}
             style={{
               borderRadius: 8,
               background: '#fff',
@@ -295,35 +222,12 @@ const PaymentAndBill = () => {
               justifyContent: 'center'
             }}
           />
-
-          <Popconfirm
-            title="Bạn có chắc chắn muốn xóa đơn hàng này?"
-            onConfirm={() => handleDelete(record)}
-            okText="Có"
-            cancelText="Không"
-          >
-            <Button
-              size="small"
-              danger
-              icon={<DeleteOutlined />}
-              style={{
-                borderRadius: 8,
-                background: '#fff',
-                border: '1px solid #ff4d4f',
-                color: '#ff4d4f',
-                padding: 6,
-                height: 36,
-                width: 36,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            />
-            s        </Popconfirm>
         </div>
       )
     },
   ]
+
+  const tablesForSelect = useMemo(() => Object.values(tableNamesMap), [tableNamesMap])
 
   return (
     <>
@@ -336,7 +240,7 @@ const PaymentAndBill = () => {
         <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             <div>Chọn bàn:</div>
-            {loadingTables ? (
+            {loadingOrders ? (
               <Spin />
             ) : (
               <Select
@@ -346,11 +250,9 @@ const PaymentAndBill = () => {
                 onChange={onTableChange}
                 allowClear
               >
-                {tables.map(t => {
-                  const id = t._id || t.id || t.table_id || t.table_number || t.name
-                  const label = t.table_name || t.name || `Bàn ${id}`
-                  return <Option key={id} value={id}>{label}</Option>
-                })}
+                {tablesForSelect.map(t => (
+                  <Option key={t.id} value={t.id}>{t.name}</Option>
+                ))}
               </Select>
             )}
           </div>
@@ -364,7 +266,7 @@ const PaymentAndBill = () => {
         <Table
           columns={columns}
           dataSource={orders}
-          loading={loadingOrders}
+          loading={loadingOrders || loadingDetail}
           rowKey={r => r._id || r.key || r.order_id}
           pagination={{ pageSize: 10 }}
         />
