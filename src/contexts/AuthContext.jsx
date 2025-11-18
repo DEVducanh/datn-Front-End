@@ -53,7 +53,8 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     console.log('ĐÃ CLICK ĐĂNG XUẤT!')
     localStorage.removeItem('userToken')
-    localStorage.removeItem('user') // Xóa cả data người dùng
+    localStorage.removeItem('user')
+    localStorage.removeItem('currentTableId')
     setIsLoggedIn(false)
     setUser(null) // Xóa state user
   }
@@ -64,7 +65,7 @@ export const AuthProvider = ({ children }) => {
   // Giá trị được cung cấp cho toàn bộ ứng dụng
   const contextValue = {
     isLoggedIn, // Trạng thái đăng nhập
-    user, // 👈 Bổ sung: Thông tin người dùng (cho truy cập tức thời)
+    user,
     login, // Hàm để component Đăng nhập gọi
     logout, // Hàm để component Header/Đăng xuất gọi
     getUser, // Hàm để truy xuất (tùy chọn nếu bạn muốn tách logic)

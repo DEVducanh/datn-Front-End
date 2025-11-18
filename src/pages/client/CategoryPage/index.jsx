@@ -31,7 +31,6 @@ const CategorySidebar = ({ selectedId, onSelectCategory }) => {
 
   return (
     <div className="bg-white p-4 rounded-lg shadow-sm sticky top-24">
-      {' '}
       {/* Sticky để sidebar đứng yên khi cuộn */}
       <h3 className="text-xl font-bold mb-4 text-gray-800">Danh mục</h3>
       {isLoading ? (
@@ -70,9 +69,7 @@ const CategorySidebar = ({ selectedId, onSelectCategory }) => {
     </div>
   )
 }
-// --- KẾT THÚC COMPONENT SIDEBAR ---
 
-// --- COMPONENT TRANG CATEGORY CHÍNH ---
 const CategoryPage = () => {
   const { tableId: qrCode } = useParams()
   const navigate = useNavigate()
@@ -252,7 +249,7 @@ const CategoryPage = () => {
       {/* === 2. BỐ CỤC CHÍNH (Sidebar + Grid) (TỪ CODE CŨ) === */}
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-8 py-8 px-4">
         {/* CỘT 1: SIDEBAR DANH MỤC */}
-        <aside className="w-full md:w-1/4 lg:w-1/5">
+        <aside className="w-full md:w-1/4 lg:w-1/5 ">
           <CategorySidebar
             selectedId={selectedCategoryId}
             onSelectCategory={setSelectedCategoryId} // Truyền hàm set state xuống
