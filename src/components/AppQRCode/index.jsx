@@ -6,10 +6,12 @@ const { Text, Title } = Typography
 
 const AppQRCode = ({ tableId, tableName }) => {
   // 1. Dùng IP từ terminal của bạn
-  const baseUrl = 'http://192.168.2.15:5173'
+  // ‼️ SỬA LỖI: Bỏ dấu / ở cuối baseUrl ‼️
+  const baseUrl = 'http://26.136.157.188:5173' // Bỏ dấu / ở đây
 
   // 2. Tạo URL đầy đủ cho QR code
-  const qrCodeUrl = `${baseUrl}/flareon?table_id=${tableId}`
+  // ‼️ SỬA LỖI: Thêm dấu / ở đầu /flareon ‼️
+  const qrCodeUrl = `${baseUrl}/flareon?table_id=${tableId}` // Thêm / ở đây
 
   // === DÒNG DEBUG: In URL ra console ===
   console.log(`URL cho ${tableName}: ${qrCodeUrl}`)
@@ -20,7 +22,6 @@ const AppQRCode = ({ tableId, tableName }) => {
     const canvas = document.getElementById(`qr-code-${tableId}`)?.querySelector('canvas')
     if (canvas) {
       const url = canvas.toDataURL('image/png')
-      const a = document.createElement('a')
       a.href = url
       a.download = `QR-Ban-${tableName}.png`
       a.click()
