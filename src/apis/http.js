@@ -12,10 +12,9 @@ const http = axios.create({
 // Add a request interceptor (SỬA LỖI JSON.PARSE)
 http.interceptors.request.use(
   function (config) {
-    const token = localStorage.getItem('token')
+    const token = localStorage.getItem('userToken') || localStorage.getItem('token')
     if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`
-      // config.headers['Authorization'] = `Bearer ${JSON.parse(token)}`
+      config.headers.Authorization = `Bearer ${token}`
     }
     return config
   },
