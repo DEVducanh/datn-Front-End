@@ -30,30 +30,28 @@ const OrderHistoryModal = ({ isOpen, onClose }) => {
     }
   }, [])
 
-  // 2. Lấy Table ID từ URL (Để biết khi nào đổi bàn)
   const tableId = useMemo(() => {
     const params = new URLSearchParams(location.search)
     return params.get('table_id') || 'unknown_table'
   }, [location.search])
 
-  // 3. Query data
+
   const {
     data: completedInvoices = [],
     isLoading,
     isError,
     error,
   } = useQuery({
-    // QUAN TRỌNG: Thêm tableId vào đây.
-    // Khi tableId đổi -> Key đổi -> Tự động fetch lại dữ liệu mới ngay lập tức.
+   
     queryKey: ['invoices', userId, tableId, 'history_realtime'],
 
     queryFn: async () => {
       if (!userId) return []
 
-      // Gọi API lấy tất cả
+ 
       const res = await invoiceAPI.getAll({ status: 'completed' })
 
-      // Chuẩn hóa data
+
       let data = []
       if (res && res.data && Array.isArray(res.data.data)) data = res.data.data
       else if (res && Array.isArray(res.data)) data = res.data

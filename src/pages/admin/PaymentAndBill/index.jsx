@@ -1,13 +1,11 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react'
-import { Card, Table, Button, Modal, Breadcrumb, message, Select, Spin, Input, Popconfirm } from 'antd'
-import {
-  // ⚠️ LOẠI BỎ DeleteOutlined
-  EyeOutlined
-} from '@ant-design/icons'
+import { Card, Table, Button, Modal, Breadcrumb, message, Select, Spin, Input } from 'antd'
+import { EyeOutlined } from '@ant-design/icons'
 
 import invoiceAPI from '@/apis/invoice/invoice.api'
 import orderAPI from '@/apis/order/order'
 
+// Giả sử các component con này tồn tại trong cùng thư mục
 import PaymentDetail from './paymentDetail'
 import ShearchPayment from './shearchPayment'
 import FilterPayment from './filterPayment'
@@ -18,13 +16,15 @@ const PaymentAndBill = () => {
   const [orders, setOrders] = useState([])
   const [allOrders, setAllOrders] = useState([])
   const [tableNamesMap, setTableNamesMap] = useState({})
+
   const [loadingOrders, setLoadingOrders] = useState(false)
-  const [loadingDetail, setLoadingDetail] = useState(false) // 💡 Thêm loading cho chi tiết
+  const [loadingDetail, setLoadingDetail] = useState(false)
   const [selectedTable, setSelectedTable] = useState(null)
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [statusFilter, setStatusFilter] = useState(null)
 
+  // Hàm lọc theo Bàn (Sử dụng useCallback để tối ưu)
   const filterByTable = useCallback((ordersList, tableId) => {
     if (!tableId) return ordersList
     return (ordersList || []).filter(o => {
@@ -32,6 +32,12 @@ const PaymentAndBill = () => {
       return String(invoiceTableId) === String(tableId)
     })
   }, [])
+
+  // Hàm lọc theo Trạng thái
+  const filterByStatus = (ordersList, status) => {
+    if (!status) return ordersList
+    return (ordersList || []).filter(o => String(o.status || '').toLowerCase() === String(status).toLowerCase())
+  }
 
   const fetchInvoices = async () => {
     setLoadingOrders(true)
@@ -55,6 +61,7 @@ const PaymentAndBill = () => {
         }
       })
 
+      // Tạo map danh sách bàn để hiển thị dropdown
       const map = {}
       merged.forEach(o => {
         const id = o.table_id?._id || o.table_id
@@ -66,11 +73,17 @@ const PaymentAndBill = () => {
       setTableNamesMap(map)
 
       setAllOrders(merged)
+
+      // Áp dụng bộ lọc hiện tại
+      let result = merged
       if (selectedTable) {
-        setOrders(filterByTable(merged, selectedTable))
-      } else {
-        setOrders(merged)
+        result = filterByTable(result, selectedTable)
       }
+      if (statusFilter) {
+        result = filterByStatus(result, statusFilter)
+      }
+      setOrders(result)
+
     } catch (err) {
       message.error('Tải danh sách hóa đơn thất bại')
     } finally {
@@ -84,17 +97,15 @@ const PaymentAndBill = () => {
 
   const onTableChange = (tableId) => {
     setSelectedTable(tableId)
-    const filtered = filterByTable(allOrders, tableId)
+    let filtered = filterByTable(allOrders, tableId)
+    if (statusFilter) {
+      filtered = filterByStatus(filtered, statusFilter)
+    }
     setOrders(filtered)
   }
 
-  // 💡 THAY THẾ openDetail để gọi API chi tiết
   const fetchDetailAndOpenModal = async (invoiceSummary) => {
     const id = invoiceSummary._id || invoiceSummary.id
-
-    // 💡 LOG ID KHI XEM CHI TIẾT
-    console.log(`[PaymentAndBill] Xem chi tiết Hoá đơn ID: ${id}`)
-
     if (!id) {
       message.error('Không tìm thấy ID hóa đơn.')
       return
@@ -102,17 +113,13 @@ const PaymentAndBill = () => {
 
     setLoadingDetail(true)
     try {
-      // 💡 GỌI API CHI TIẾT MỚI
       const res = await invoiceAPI.getById(id)
-      const detailedData = res?.data || res // Dữ liệu chi tiết hóa đơn
-
-      // Cập nhật state với dữ liệu chi tiết
+      const detailedData = res?.data || res
       setSelectedOrder({
-        ...invoiceSummary, // Giữ lại các trường đã merge (ví dụ: customer, tableName)
-        ...detailedData // Ghi đè bằng dữ liệu chi tiết từ API
+        ...invoiceSummary,
+        ...detailedData
       })
       setDetailOpen(true)
-
     } catch (err) {
       message.error('Tải chi tiết hóa đơn thất bại.')
     } finally {
@@ -120,17 +127,11 @@ const PaymentAndBill = () => {
     }
   }
 
-  // Đổi tên hàm cũ (chỉ để giữ nguyên tên trong JSX)
+  // Alias cho hàm mở chi tiết
   const openDetail = fetchDetailAndOpenModal
 
-
   const markPaid = async (order) => {
-    // Lấy ID từ object summary hoặc từ ID được truyền vào từ PaymentDetail
     const id = order._id || order.id || order.order_id || order.key || order
-
-    // 💡 LOG ID KHI CẬP NHẬT TRẠNG THÁI
-    console.log(`[PaymentAndBill] Cập nhật trạng thái cho Hoá đơn ID: ${id}`)
-
     if (!id) {
       message.error('Không xác định được ID hóa đơn')
       return
@@ -145,52 +146,48 @@ const PaymentAndBill = () => {
         await orderAPI.updateStatus(id, newStatus)
       } else if (orderAPI.update) {
         await orderAPI.update(id, { status: newStatus })
+      } else if (orderAPI.patch) {
+        await orderAPI.patch(id, { status: newStatus })
       } else {
-        await orderAPI.patch?.(id, { status: newStatus })
+        message.error("Không tìm thấy hàm API để cập nhật trạng thái")
+        return
       }
       message.success(isCurrentlyPaid ? 'Đã chuyển về Unpaid' : 'Cập nhật trạng thái: đã thanh toán')
       await fetchInvoices()
       setDetailOpen(false)
     } catch (err) {
+      console.error("Lỗi markPaid:", err)
       message.error('Cập nhật trạng thái thất bại')
     }
   }
 
-
-  // ⚠️ LOẠI BỎ HÀM handleDelete
-  // const handleDelete = async (order) => { ... }
-
-
   const handleSearch = (term) => {
-    // Giữ nguyên logic handleSearch
     const q = String(term || '').trim().toLowerCase()
-    if (!q) {
-      setOrders(selectedTable ? filterByTable(allOrders, selectedTable) : (allOrders || []))
-      return
-    }
 
+    // Lọc dựa trên danh sách gốc (allOrders)
     const filtered = (allOrders || []).filter(o => {
       const code = String(o.orderId || o.code || o._id || '').toLowerCase()
-      const customer = String(
-        o.customer || ''
-      ).toLowerCase()
-
+      const customer = String(o.customer || '').toLowerCase()
       return code.includes(q) || customer.includes(q)
     })
 
+    // Áp dụng thêm filter bàn nếu có
     const result = selectedTable ? filterByTable(filtered, selectedTable) : filtered
-    setOrders(result)
+
+    // Áp dụng thêm filter status nếu có
+    const finalResult = statusFilter ? filterByStatus(result, statusFilter) : result
+
+    setOrders(finalResult)
   }
 
   const handleFilterStatus = (status) => {
     // Giữ nguyên logic handleFilterStatus
     setStatusFilter(status)
-    const base = selectedTable ? filterByTable(allOrders, selectedTable) : (allOrders || [])
-    if (!status) {
-      setOrders(base)
-      return
+    let base = allOrders
+    if (selectedTable) {
+      base = filterByTable(base, selectedTable)
     }
-    const filtered = (base || []).filter(o => String(o.status || '').toLowerCase() === String(status).toLowerCase())
+    const filtered = filterByStatus(base, status)
     setOrders(filtered)
   }
 
@@ -212,7 +209,7 @@ const PaymentAndBill = () => {
             size="small"
             onClick={() => openDetail(record)} // Gọi hàm fetch chi tiết
             icon={<EyeOutlined />}
-            loading={selectedOrder?._id === record._id && loadingDetail} // Hiển thị loading khi đang fetch chi tiết
+            loading={selectedOrder?._id === record._id && loadingDetail}
             style={{
               borderRadius: 8,
               background: '#fff',
@@ -225,8 +222,6 @@ const PaymentAndBill = () => {
               justifyContent: 'center'
             }}
           />
-
-          {/* ⚠️ NÚT XÓA ĐÃ BỊ LOẠI BỎ */}
         </div>
       )
     },
@@ -255,11 +250,9 @@ const PaymentAndBill = () => {
                 onChange={onTableChange}
                 allowClear
               >
-                {tablesForSelect.map(t => {
-                  const id = t.id
-                  const label = t.name
-                  return <Option key={id} value={id}>{label}</Option>
-                })}
+                {tablesForSelect.map(t => (
+                  <Option key={t.id} value={t.id}>{t.name}</Option>
+                ))}
               </Select>
             )}
           </div>
@@ -273,7 +266,7 @@ const PaymentAndBill = () => {
         <Table
           columns={columns}
           dataSource={orders}
-          loading={loadingOrders || loadingDetail} // Loading chung
+          loading={loadingOrders || loadingDetail}
           rowKey={r => r._id || r.key || r.order_id}
           pagination={{ pageSize: 10 }}
         />
