@@ -6,8 +6,7 @@ const { Text, Title } = Typography
 
 const AppQRCode = ({ tableId, tableName }) => {
   // 1. Dùng IP từ terminal của bạn
-  // ‼️ SỬA LỖI: Bỏ dấu / ở cuối baseUrl ‼️
-  const baseUrl = 'http://26.136.157.188:5173' // Bỏ dấu / ở đây
+  const baseUrl = ' http://26.45.230.226:5173'
 
   // 2. Tạo URL đầy đủ cho QR code
   // ‼️ SỬA LỖI: Thêm dấu / ở đầu /flareon ‼️

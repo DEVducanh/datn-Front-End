@@ -7,124 +7,94 @@ import TableTable from './TableTable'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import TableFormModal from './TableFormModal'
 import tableAPI from '@/apis/table/table.api'
+import OrderDetailModal from './OrderDetailModal'
 
 const tableKeys = {
   all: ['tables'],
   list: () => ['tables', 'list'],
-  detail: (id) => ['tables', 'detail', id],
 }
 
 const TableManagement = () => {
   const [form] = Form.useForm()
   const queryClient = useQueryClient()
+
+  // State cho modal tạo/sửa bàn
   const [isOpenModal, setIsOpenModal] = useState(false)
   const [editingRow, setEditingRow] = useState(null)
   const [deletingId, setDeletingId] = useState(null)
 
-  // GET LIST
+  // --- STATE CHO MODAL XEM ĐƠN ---
+  const [isOrderModalOpen, setIsOrderModalOpen] = useState(false)
+  const [selectedTable, setSelectedTable] = useState(null) // Lưu bàn đang được xem
+
+  // API lấy danh sách bàn
   const { data: tables = [], isLoading } = useQuery({
     queryKey: tableKeys.list(),
     queryFn: async () => {
       const res = await tableAPI.getAll()
       return res.data || []
     },
-    onError: () => toast.error('Không thể tải bàn ăn, vui lòng thử lại!'),
+    onError: () => toast.error('Lỗi tải danh sách bàn!'),
   })
 
-  // CREATE
+  // ... (Các mutation Create/Update/Delete giữ nguyên như cũ của bạn) ...
   const createMutation = useMutation({
     mutationFn: (payload) => tableAPI.create(payload),
     onSuccess: () => {
-      toast.success('Thêm bàn ăn thành công!')
+      toast.success('Thành công')
       queryClient.invalidateQueries({ queryKey: tableKeys.list() })
       closeModal()
     },
-    onError: () => toast.error('Thêm bàn ăn thất bại!'),
   })
-
-  // UPDATE
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }) => tableAPI.update(id, payload),
-    onSuccess: async () => {
-      toast.success('Cập nhật bàn ăn thành công!')
-      await queryClient.invalidateQueries({ queryKey: tableKeys.list() })
+    onSuccess: () => {
+      toast.success('Thành công')
+      queryClient.invalidateQueries({ queryKey: tableKeys.list() })
       closeModal()
     },
-    onError: () => toast.error('Cập nhật bàn ăn thất bại!'),
   })
-
-  // DELETE
   const deleteMutation = useMutation({
     mutationFn: (id) => tableAPI.delete(id),
-    onMutate: async (id) => {
-      await queryClient.cancelQueries({ queryKey: tableKeys.list() })
-      const previous = queryClient.getQueryData(tableKeys.list())
-      queryClient.setQueryData(tableKeys.list(), (old) =>
-        Array.isArray(old) ? old.filter((x) => x._id !== id) : old
-      )
-      return { previous }
-    },
-    onError: (_e, _id, ctx) => {
-      queryClient.setQueryData(tableKeys.list(), ctx?.previous)
-      toast.error('Xoá bàn ăn thất bại!')
-    },
     onSuccess: () => {
-      toast.success('Xoá bàn ăn thành công!')
-    },
-    onSettled: () => {
-      setDeletingId(null)
+      toast.success('Thành công')
       queryClient.invalidateQueries({ queryKey: tableKeys.list() })
     },
   })
 
+  // Các hàm xử lý
   const openCreate = () => {
     setEditingRow(null)
     form.resetFields()
     setIsOpenModal(true)
   }
-
   const openEdit = (record) => {
     setEditingRow(record)
     form.resetFields()
-    form.setFieldsValue({
-      table_name: record.table_name,
-      capacity: record.capacity,
-      qr_code: record.qr_code, // Để tạm sẽ xóa
-      status: record.status,
-    })
+    form.setFieldsValue({ ...record })
     setIsOpenModal(true)
   }
-
   const handleRemove = (id) => {
     deleteMutation.mutate(id)
   }
-
   const closeModal = () => {
-    form.resetFields()
     setIsOpenModal(false)
     setEditingRow(null)
   }
 
-  const submitting = createMutation.isPending || updateMutation.isPending
-  const modalTitle = useMemo(() => (editingRow ? 'Cập nhật bàn ăn' : 'Thêm bàn ăn'), [editingRow])
-
   const handleOk = async () => {
     try {
       const values = await form.validateFields()
-      const payload = {
-        table_name: values.table_name,
-        capacity: values.capacity,
-        qr_code: 'Test', // Để tạm sẽ xóa
-        status: values.status,
-      }
-      if (editingRow) {
-        updateMutation.mutate({ id: editingRow._id, payload })
-      } else {
-        createMutation.mutate(payload)
-      }
-    } catch {
-      // Lỗi validate
-    }
+      if (editingRow) updateMutation.mutate({ id: editingRow._id, payload: values })
+      else createMutation.mutate(values)
+    } catch {}
+  }
+
+  // --- HÀM MỞ MODAL XEM ĐƠN ---
+  const handleViewOrder = (tableRecord) => {
+    console.log('Xem đơn của bàn:', tableRecord)
+    setSelectedTable(tableRecord)
+    setIsOrderModalOpen(true)
   }
 
   return (
@@ -147,16 +117,27 @@ const TableManagement = () => {
           onEdit={openEdit}
           onRemove={handleRemove}
           deletingId={deletingId}
+          // Truyền hàm xuống dưới
+          onViewOrder={handleViewOrder}
         />
       </Card>
 
+      {/* Modal Thêm/Sửa Bàn */}
       <TableFormModal
         open={isOpenModal}
-        title={modalTitle}
-        submitting={submitting}
+        title={editingRow ? 'Cập nhật' : 'Thêm mới'}
+        submitting={createMutation.isPending || updateMutation.isPending}
         form={form}
         onOk={handleOk}
         onCancel={closeModal}
+      />
+
+      {/* --- MODAL XEM ĐƠN HÀNG --- */}
+      <OrderDetailModal
+        open={isOrderModalOpen}
+        onCancel={() => setIsOrderModalOpen(false)}
+        tableId={selectedTable?._id}
+        tableName={selectedTable?.table_name}
       />
     </div>
   )

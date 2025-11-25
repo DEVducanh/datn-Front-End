@@ -1,68 +1,61 @@
+// src/layouts/DefaultLayout/components/ProductGrid/index.jsx
 import React from 'react'
+import { useNavigate } from 'react-router-dom' // <<< 1. IMPORT
+import { ShoppingCart } from 'lucide-react'
 
-// Giả sử component cha sẽ truyền xuống prop onAddToCart: (product) => void
+// Hàm format tiền (ví dụ, bạn có thể đã có)
+const formatVnd = (n) => (n || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + 'đ'
+
 const ProductGrid = ({ products, onAddToCart }) => {
+  const navigate = useNavigate() // <<< 2. KHỞI TẠO
+
+  // --- 3. TẠO HÀM XỬ LÝ CLICK ---
+  const handleProductClick = (productId) => {
+    // Giả sử đường dẫn của bạn là /flareon/dishes/:id
+    navigate(`/flareon/product/${productId}`)
+  }
+
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 md:gap-6">
-      {' '}
-      {/* Điều chỉnh gap */}
-      {Array.isArray(products) &&
-        products.map((product) => (
-          // Thẻ sản phẩm
-          <div
-            key={product.id}
-            className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col relative"
-          >
-            {' '}
-            {/* Thêm relative */}
-            {/* Ảnh sản phẩm */}
-            <div className="w-full h-32 sm:h-40 md:h-48 overflow-hidden">
-              {' '}
-              {/* Chiều cao ảnh */}
-              <img
-                src={product.image || 'https://via.placeholder.com/150'}
-                alt={product.name || 'Ảnh sản phẩm'}
-                className="w-full h-full object-cover" // Bỏ hover effect nếu không cần
-              />
-            </div>
-            {/* Thông tin sản phẩm */}
-            <div className="p-3 flex-grow flex flex-col justify-between">
-              {' '}
-              {/* Thêm padding và flex */}
-              <div>
-                <h3 className="font-semibold text-sm md:text-base text-gray-800 mb-1 truncate">
-                  {product.name || 'N/A'}
-                </h3>
-                <p className="text-xs md:text-sm text-gray-500 mb-2 line-clamp-2">
-                  {product.description || ''}
-                </p>
-              </div>
-              {/* Giá tiền */}
-              <p className="text-red-500 font-bold text-sm md:text-base mt-1">
-                {(product.price ?? 0).toLocaleString('vi-VN')} đ
-              </p>
-            </div>
-            {/* Nút "+" Thêm vào giỏ (đặt ở góc dưới bên phải) */}
-            <button
-              onClick={() => onAddToCart && onAddToCart(product)}
-              className="absolute bottom-2 right-2 bg-orange-500 text-white rounded-md w-7 h-7 md:w-8 md:h-8 flex items-center justify-center hover:bg-orange-600 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed" // Định vị tuyệt đối, style nút vuông
-              disabled={!onAddToCart}
-              aria-label="Thêm vào giỏ"
-              title="Thêm vào giỏ" // Tooltip
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {products.map((product) => (
+        <div
+          key={product._id}
+          className="bg-white rounded-lg shadow-md overflow-hidden transition-shadow duration-300 hover:shadow-xl flex flex-col"
+        >
+          {/* --- 4. THÊM onClick VÀO ẢNH --- */}
+          <img
+            src={product.image}
+            alt={product.name}
+            className="w-full h-48 object-cover cursor-pointer" // <<< Thêm cursor-pointer
+            onClick={() => handleProductClick(product._id)} // <<< Thêm onClick
+          />
+
+          <div className="p-4 flex flex-col flex-grow">
+            {/* (Bạn cũng có thể thêm onClick cho cả tên món ăn) */}
+            <h3
+              className="text-lg font-semibold text-gray-800 mb-2 cursor-pointer hover:text-orange-500"
+              onClick={() => handleProductClick(product._id)} // <<< Thêm onClick
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4 md:h-5 md:w-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={3}
+              {product.name}
+            </h3>
+            <p className="text-sm text-gray-500 mb-4 flex-grow line-clamp-2">
+              {product.description}
+            </p>
+
+            <div className="flex justify-between items-center mt-auto">
+              <span className="text-xl font-bold text-orange-600">{formatVnd(product.price)}</span>
+              {/* Nút Thêm vào giỏ (giữ nguyên) */}
+              <button
+                onClick={() => onAddToCart(product)}
+                className="p-2 bg-orange-100 text-orange-600 rounded-full hover:bg-orange-500 hover:text-white transition-colors"
+                aria-label="Thêm vào giỏ"
               >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-            </button>
+                <ShoppingCart size={20} />
+              </button>
+            </div>
           </div>
-        ))}
+        </div>
+      ))}
     </div>
   )
 }

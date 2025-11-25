@@ -52,19 +52,7 @@ const Header = () => {
     localStorage.removeItem('currentQrCode')
     window.location.href = '/flareon/login'
   }
-
-  // --- TẤT CẢ LOGIC QUERY HÓA ĐƠN VÀ CÁC HÀM XỬ LÝ ĐÃ BỊ XÓA ---
-  // (useQuery for invoices ... ĐÃ XÓA)
-  // (openOrderDetail ... ĐÃ XÓA)
-  // (handleReviewClick ... ĐÃ XÓA)
-
-  // --- Menu dropdown (Giữ nguyên) ---
   const userMenuItems = [
-    {
-      key: 'profile',
-      label: <NavLink to="/flareon/profile">Hồ sơ của tôi</NavLink>,
-      icon: <User size={16} />,
-    },
     {
       key: 'orders',
       label: <NavLink to="/flareon/orders">Đơn hàng của tôi</NavLink>,
@@ -74,7 +62,7 @@ const Header = () => {
       key: 'history-modal',
       label: 'Lịch sử hóa đơn',
       icon: <Clock size={16} />,
-      onClick: () => setIsModalOpen(true), // <<<--- Chỉ cần gọi hàm này
+      onClick: () => setIsModalOpen(true),
     },
     { type: 'divider' },
     {
@@ -100,8 +88,8 @@ const Header = () => {
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm border-b border-gray-200">
       <nav className="max-w-7xl mx-auto px-4 py-4">
-        {/* ... (Toàn bộ phần JSX của Header giữ nguyên) ... */}
         <div className="flex items-center justify-between">
+          {/* Logo */}
           <div
             className="flex items-center gap-2 cursor-pointer"
             onClick={() => navigate('/flareon')}
@@ -112,6 +100,7 @@ const Header = () => {
             <span className="text-xl text-gray-900 font-semibold">Flareon</span>
           </div>
 
+          {/* Menu Desktop */}
           <div className="hidden md:flex items-center gap-8">
             <NavLink to="/flareon">Trang chủ</NavLink>
             <NavLink to="/flareon/about">Về chúng tôi</NavLink>
@@ -119,6 +108,7 @@ const Header = () => {
             <NavLink to="/flareon/contact">Liên hệ</NavLink>
           </div>
 
+          {/* User + Cart Desktop */}
           <div className="hidden md:flex items-center gap-3">
             {userData ? (
               <UserDropdown />
@@ -130,11 +120,11 @@ const Header = () => {
                 <AntButton onClick={() => navigate('/flareon/register')}>Đăng ký</AntButton>
               </>
             )}
+
             <Button
               type="text"
               className="!flex !items-center !justify-center"
               onClick={() => navigate('/flareon/cart')}
-              aria-label="Giỏ hàng"
             >
               <Badge count={totalItemCount} size="small" offset={[0, 2]}>
                 <ShoppingCart className="w-5 h-5 text-gray-700 hover:text-orange-500" />
@@ -142,15 +132,74 @@ const Header = () => {
             </Button>
           </div>
 
-          <button className="md:hidden" onClick={() => setIsMenuOpen(!isMenuOpen)}>
+          {/* Mobile Toggle Button */}
+          <button className="md:hidden p-2" onClick={() => setIsMenuOpen(!isMenuOpen)}>
             {isMenuOpen ? <X /> : <Menu />}
           </button>
         </div>
 
-        {isMenuOpen && <div className="md:hidden ..."> ... </div>}
+        {/* Mobile Menu */}
+        {isMenuOpen && (
+          <div className="md:hidden flex flex-col gap-3 mt-4 pb-4 border-t border-gray-200">
+            <NavLink className="py-2" to="/flareon" onClick={() => setIsMenuOpen(false)}>
+              Trang chủ
+            </NavLink>
+            <NavLink className="py-2" to="/flareon/about" onClick={() => setIsMenuOpen(false)}>
+              Về chúng tôi
+            </NavLink>
+            <NavLink className="py-2" to="/flareon/category" onClick={() => setIsMenuOpen(false)}>
+              Món ăn
+            </NavLink>
+            <NavLink className="py-2" to="/flareon/contact" onClick={() => setIsMenuOpen(false)}>
+              Liên hệ
+            </NavLink>
+
+            <div className="flex flex-col gap-3 mt-2">
+              {userData ? (
+                <>
+                  <div className="flex items-center gap-3 px-1">
+                    <Avatar>{userData.username.charAt(0).toUpperCase()}</Avatar>
+                    <span className="font-semibold">{userName}</span>
+                  </div>
+
+                  <Button block onClick={() => setIsModalOpen(true)}>
+                    <Clock size={16} className="mr-2" /> Lịch sử hóa đơn
+                  </Button>
+
+                  <Button block danger onClick={logout}>
+                    <LogOut size={16} className="mr-2" /> Đăng xuất
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <AntButton block onClick={() => navigate('/flareon/login')}>
+                    Đăng nhập
+                  </AntButton>
+                  <AntButton block onClick={() => navigate('/flareon/register')}>
+                    Đăng ký
+                  </AntButton>
+                </>
+              )}
+
+              <Button
+                block
+                type="text"
+                onClick={() => {
+                  navigate('/flareon/cart')
+                  setIsMenuOpen(false)
+                }}
+              >
+                <Badge count={totalItemCount}>
+                  <ShoppingCart className="w-5 h-5 mr-2" />
+                </Badge>
+                Giỏ hàng
+              </Button>
+            </div>
+          </div>
+        )}
       </nav>
 
-      {/* --- XÓA MODAL CŨ VÀ GỌI COMPONENT MỚI --- */}
+      {/* Modal */}
       <OrderHistoryModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
     </header>
   )

@@ -1,64 +1,91 @@
 import React, { useMemo } from 'react'
 import { Modal, List, Spin, Alert } from 'antd'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom' // Thêm useLocation
 import { Receipt, ChevronRight } from 'lucide-react'
-
 import invoiceAPI from '@/apis/invoice/invoice.api'
 
-// Hàm format tiền
 const formatVnd = (n) => (n || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + 'đ'
+
+// Hàm lấy ID an toàn
+const getSafeIdString = (field) => {
+  if (!field) return null
+  if (typeof field === 'object' && field._id) return String(field._id)
+  if (typeof field === 'string') return field
+  return null
+}
 
 const OrderHistoryModal = ({ isOpen, onClose }) => {
   const navigate = useNavigate()
+  const location = useLocation() // Hook để lấy URL hiện tại
 
   // 1. Lấy userId từ localStorage
   const userId = useMemo(() => {
     try {
       const userString = localStorage.getItem('user')
-      return userString ? JSON.parse(userString)._id : null
+      const id = userString ? JSON.parse(userString)._id : null
+      return id ? String(id) : null
     } catch (e) {
       return null
     }
   }, [])
 
-  // 2. Query để lấy lịch sử hóa đơn
+  const tableId = useMemo(() => {
+    const params = new URLSearchParams(location.search)
+    return params.get('table_id') || 'unknown_table'
+  }, [location.search])
+
+
   const {
     data: completedInvoices = [],
     isLoading,
     isError,
     error,
   } = useQuery({
-    // Thêm userId vào queryKey để khi user thay đổi thì nó tự load lại
-    queryKey: ['invoices', userId, 'completed'],
+   
+    queryKey: ['invoices', userId, tableId, 'history_realtime'],
 
     queryFn: async () => {
       if (!userId) return []
-      const res = await invoiceAPI.getAll({
-        status: 'completed',
-        user_id: userId // Lọc theo ID người dùng
+
+ 
+      const res = await invoiceAPI.getAll({ status: 'completed' })
+
+
+      let data = []
+      if (res && res.data && Array.isArray(res.data.data)) data = res.data.data
+      else if (res && Array.isArray(res.data)) data = res.data
+      else if (res && Array.isArray(res)) data = res
+
+      // Lọc Client-side (Logic chuẩn)
+      const myInvoices = data.filter((invoice) => {
+        const invoiceOwnerId =
+          getSafeIdString(invoice.user_id) ||
+          getSafeIdString(invoice.account_id) ||
+          getSafeIdString(invoice.userId)
+
+        let orderOwnerId = null
+        if (Array.isArray(invoice.order_id) && invoice.order_id.length > 0) {
+          orderOwnerId = getSafeIdString(invoice.order_id[0].user_id)
+        } else if (invoice.order_id) {
+          orderOwnerId = getSafeIdString(invoice.order_id.user_id)
+        }
+
+        return invoiceOwnerId === userId || orderOwnerId === userId
       })
-     
 
-      // Xử lý các cấu trúc API khác nhau trả về
-      if (res && res.data && Array.isArray(res.data.data)) return res.data.data
-      if (res && Array.isArray(res.data)) return res.data
-      if (res && Array.isArray(res)) return res
-
-      return []
+      return myInvoices.reverse()
     },
-    enabled: isOpen && !!userId, // Chỉ chạy khi modal mở và có userId
-    staleTime: 1000 * 60 * 5,
-    refetchOnWindowFocus: false,
+    enabled: isOpen && !!userId,
+    staleTime: 0, // QUAN TRỌNG: Luôn coi dữ liệu là cũ, bắt buộc tải mới mỗi khi mở Modal
+    gcTime: 0, // (Hoặc cacheTime cũ) Không lưu cache khi đóng modal
+    refetchOnWindowFocus: true, // Tự tải lại khi quay lại tab
   })
-
-  // Hàm chuyển đến trang chi tiết
   const openOrderDetail = (invoice) => {
     onClose()
     navigate(`/flareon/invoices/${invoice._id}`)
   }
 
-  // Hàm render nội dung modal
   const renderContent = () => {
     if (isLoading) {
       return (
@@ -71,12 +98,7 @@ const OrderHistoryModal = ({ isOpen, onClose }) => {
     if (isError) {
       return (
         <div className="flex justify-center p-4">
-          <Alert
-            message="Lỗi tải dữ liệu"
-            description={error?.message || 'Không thể tải lịch sử hóa đơn.'}
-            type="error"
-            showIcon
-          />
+          <Alert message="Lỗi tải dữ liệu" type="error" showIcon />
         </div>
       )
     }
@@ -85,7 +107,7 @@ const OrderHistoryModal = ({ isOpen, onClose }) => {
       return (
         <div className="flex justify-center items-center h-48 flex-col gap-2">
           <Receipt className="w-12 h-12 text-gray-300" />
-          <p className="text-gray-500">Bạn chưa có hóa đơn nào đã hoàn thành.</p>
+          <p className="text-gray-500">Bạn chưa có hóa đơn nào.</p>
         </div>
       )
     }
@@ -94,19 +116,31 @@ const OrderHistoryModal = ({ isOpen, onClose }) => {
       <List
         dataSource={completedInvoices}
         renderItem={(invoice) => {
-          const order = invoice.order_id || {}
-          const tableName = order.table_id?.name || 'Bàn không xác định'
+          let tableName = 'Mang về / Khác'
+          let order = null
+          if (Array.isArray(invoice.order_id) && invoice.order_id.length > 0)
+            order = invoice.order_id[0]
+          else if (invoice.order_id) order = invoice.order_id
+
+          if (order?.table_id?.name) tableName = order.table_id.name
+          else if (invoice.table_id?.name) tableName = invoice.table_id.name
+
           const date = new Date(invoice.createdAt || Date.now()).toLocaleDateString('vi-VN')
 
           return (
             <List.Item
               onClick={() => openOrderDetail(invoice)}
-              className="!p-4 hover:!bg-gray-50 !cursor-pointer border-b border-gray-100 last:border-0 transition-colors"
-              actions={[<ChevronRight key="arrow" className="text-gray-400 w-5 h-5" />]}
+              className="!p-4 hover:!bg-gray-50 !cursor-pointer border-b border-gray-100 last:border-0 transition-colors group"
+              actions={[
+                <ChevronRight
+                  key="arrow"
+                  className="text-gray-400 w-5 h-5 group-hover:text-orange-500 transition-colors"
+                />,
+              ]}
             >
               <List.Item.Meta
                 avatar={
-                  <div className="bg-orange-100 p-2 rounded-full">
+                  <div className="bg-orange-50 p-2 rounded-full group-hover:bg-orange-100 transition-colors">
                     <Receipt className="w-5 h-5 text-orange-600" />
                   </div>
                 }
@@ -139,11 +173,8 @@ const OrderHistoryModal = ({ isOpen, onClose }) => {
       centered
       className="rounded-lg overflow-hidden"
     >
-      <div className="max-h-[60vh] overflow-y-auto mt-4 custom-scrollbar">
-        {renderContent()}
-      </div>
+      <div className="max-h-[60vh] overflow-y-auto mt-4 custom-scrollbar">{renderContent()}</div>
     </Modal>
   )
 }
-
 export default OrderHistoryModal

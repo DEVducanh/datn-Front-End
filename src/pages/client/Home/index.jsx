@@ -33,7 +33,7 @@ const Home = () => {
       <Hero />
       <Features />
       <Categories />
-      <Products />
+      <Products limit={10} />
     </>
   )
 }

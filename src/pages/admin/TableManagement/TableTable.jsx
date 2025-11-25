@@ -1,11 +1,12 @@
 import React, { useMemo } from 'react'
-import { Table, Popconfirm, QRCode, Tag } from 'antd'
-import { EditOutlined, DeleteOutlined } from '@ant-design/icons'
+import { Table, Popconfirm, Tag, Button, Tooltip } from 'antd' // Nhớ import Button, Tooltip
+import { EditOutlined, DeleteOutlined, FileSearchOutlined } from '@ant-design/icons'
 import AntButton from '@/components/AntButton'
 import AppQRCode from '@/components/AppQRCode'
 import { STATUS_TABLE_MAP } from '@/shared/constants/table'
 
-const TableTable = ({ data, loading, onEdit, onRemove, deletingId }) => {
+// Nhận prop onViewOrder từ cha
+const TableTable = ({ data, loading, onEdit, onRemove, deletingId, onViewOrder }) => {
   const columns = useMemo(
     () => [
       { title: 'Tên bàn', dataIndex: 'table_name' },
@@ -32,16 +33,29 @@ const TableTable = ({ data, loading, onEdit, onRemove, deletingId }) => {
       {
         title: 'Thao tác',
         key: 'action',
-        width: 120,
+        width: 160,
         align: 'center',
         render: (_, record) => (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center gap-2">
+            {/* NÚT XEM ĐƠN HÀNG */}
+            {/* Chỉ hiện khi bàn đã đặt hoặc đang dùng */}
+            {(record.status === 'occupied' || record.status === 'reserved') && (
+              <Tooltip title="Xem đơn hàng">
+                <Button
+                  icon={<FileSearchOutlined />}
+                  size="middle"
+                  onClick={() => onViewOrder(record)} // Gọi hàm từ cha
+                />
+              </Tooltip>
+            )}
+
             <AntButton title="Chỉnh sửa" icon={<EditOutlined />} onClick={() => onEdit(record)} />
+
             <Popconfirm
-              title="Bạn có chắc chắn muốn xoá bàn này?"
+              title="Xoá bàn này?"
               onConfirm={() => onRemove(record._id)}
               okText="Có"
-              cancelText="Không"
+              cancelText="Ko"
             >
               <AntButton
                 title="Xoá"
@@ -54,7 +68,7 @@ const TableTable = ({ data, loading, onEdit, onRemove, deletingId }) => {
         ),
       },
     ],
-    [onEdit, onRemove]
+    [onEdit, onRemove, deletingId, onViewOrder] // Đừng quên dependency onViewOrder
   )
   return <Table rowKey="_id" loading={loading} columns={columns} dataSource={data} />
 }
