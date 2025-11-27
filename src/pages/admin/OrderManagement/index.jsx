@@ -19,7 +19,7 @@ import OrderModalDetail from './orderDetail'
 const STATUS_LABELS = {
   Pending: 'Chờ xác nhận',
   Processing: 'Đang nấu',
-  Shipped: 'Đã phục vụ', // Quy ước Shipped là Đã phục vụ
+  Shipped: 'Đã phục vụ', 
   Completed: 'Hoàn thành',
   Cancelled: 'Đã hủy',
   Paid: 'Đã thanh toán'
@@ -28,7 +28,7 @@ const STATUS_LABELS = {
 const STATUS_COLORS = {
   Pending: 'gold',
   Processing: 'blue',
-  Shipped: 'cyan', // Màu xanh lơ cho Đã phục vụ
+  Shipped: 'cyan', 
   Completed: 'green',
   Cancelled: 'red',
   Paid: 'magenta'

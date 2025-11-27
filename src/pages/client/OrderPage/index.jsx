@@ -19,15 +19,11 @@ const BASE_ORDER_URL = '/orders'
 const ORDER_ITEM_DETAIL_URL = '/order-item/order'
 const BASE_ORDER_ITEM_URL = '/order-item'
 
-// --- CẤU HÌNH TRẠNG THÁI TIẾNG VIỆT ---
 const STATUS_CONFIG = {
   Pending: { color: 'orange', icon: <ClockCircleOutlined />, text: 'Đang chờ xác nhận' },
   Processing: { color: 'blue', icon: <SyncOutlined spin />, text: 'Đang nấu' },
-
-  // Gộp cả 2 cái này thành "Đã phục vụ" để khách dễ hiểu
   Shipped: { color: 'green', icon: <CheckCircleOutlined />, text: 'Đã phục vụ' },
   Served: { color: 'green', icon: <CheckCircleOutlined />, text: 'Đã phục vụ' },
-
   Ready: { color: 'geekblue', icon: <CheckCircleOutlined />, text: 'Đã xong (Chờ bưng)' },
   Cancelled: { color: 'red', icon: <CloseCircleOutlined />, text: 'Đã hủy' },
   Paid: { color: 'magenta', icon: <CheckCircleOutlined />, text: 'Đã thanh toán' },
@@ -37,7 +33,6 @@ const STATUS_CONFIG = {
 
 const getItemStatusTag = (status) => {
   const config = STATUS_CONFIG[status]
-  // Nếu gặp trạng thái lạ, hiện nguyên văn nhưng màu xám
   if (!config) return <Tag>{status}</Tag>
   return <Tag color={config.color} icon={config.icon}>{config.text}</Tag>
 }
@@ -53,11 +48,23 @@ const OrderPage = () => {
   const [modalApi, modalContextHolder] = Modal.useModal()
   const [messageApi, contextHolder] = message.useMessage()
 
+  // 1. Logic Tự động cập nhật (Auto Refresh)
   useEffect(() => {
     const tableId = localStorage.getItem('currentTableId')
     if (tableId) {
       setCurrentTableId(tableId)
-      fetchOrdersAndItems(tableId)
+
+      // Gọi ngay lập tức lần đầu
+      fetchOrdersAndItems(tableId, false)
+
+      // Cài đặt gọi lại sau mỗi 5 giây (Polling)
+      const interval = setInterval(() => {
+        // Truyền true để chạy ngầm (không hiện loading xoay xoay)
+        fetchOrdersAndItems(tableId, true)
+      }, 5000)
+
+      // Dọn dẹp khi thoát trang
+      return () => clearInterval(interval)
     }
   }, [])
 
@@ -69,13 +76,15 @@ const OrderPage = () => {
       if (Array.isArray(response)) return response
       return []
     } catch (error) {
-      console.error(`[API] Lỗi lấy chi tiết đơn ${orderId}:`, error)
+      // console.error(`Lỗi chi tiết đơn ${orderId}`, error) // Tắt log cho đỡ rối
       return []
     }
   }
 
-  const fetchOrdersAndItems = useCallback(async (tableId) => {
-    setLoading(true)
+  // 2. Hàm Fetch Data (Hỗ trợ chạy ngầm isBackground)
+  const fetchOrdersAndItems = useCallback(async (tableId, isBackground = false) => {
+    if (!isBackground) setLoading(true)
+
     try {
       const response = await http.get(BASE_ORDER_URL)
 
@@ -92,11 +101,13 @@ const OrderPage = () => {
         })
       }
 
+      // Check thay đổi để tránh render lại không cần thiết (Optional optimization)
+      // Ở đây ta cứ set lại để cập nhật mới nhất
       setOrders(fetchedOrders)
 
       if (fetchedOrders.length === 0) {
         setItems([])
-        setLoading(false)
+        if (!isBackground) setLoading(false)
         return
       }
 
@@ -117,17 +128,13 @@ const OrderPage = () => {
 
     } catch (error) {
       console.error('Lỗi tải đơn hàng:', error)
-      if (error.response?.status !== 404) {
-        messageApi.error('Không thể tải trạng thái món ăn.')
-      }
     } finally {
-      setLoading(false)
+      if (!isBackground) setLoading(false)
     }
   }, [messageApi])
 
 
   const handlePaymentClick = () => {
-    // Logic: Cho phép thanh toán các món ĐÃ PHỤC VỤ (Shipped hoặc Served)
     const hasServedItems = items.some(item =>
       (item.status === 'Shipped' || item.status === 'Served') && item.orderStatus !== 'Paid'
     )
@@ -143,7 +150,6 @@ const OrderPage = () => {
     const { _id: itemId, status: currentStatus, dish_id } = record
     const dishName = dish_id?.dish_name || 'món này'
 
-    // Chặn hủy nếu món đã làm xong hoặc đã ra bàn
     if (['Shipped', 'Served', 'Cancelled', 'Paid', 'Completed'].includes(currentStatus)) {
       messageApi.warning(`Món đã phục vụ hoặc hoàn thành, không thể hủy.`)
       return
@@ -159,7 +165,13 @@ const OrderPage = () => {
         setIsUpdating(true)
         try {
           await http.patch(`${BASE_ORDER_ITEM_URL}/${itemId}/status`, { status: 'Cancelled' })
+
+          // Cập nhật nóng ngay lập tức
           setItems(prev => prev.filter(item => item._id !== itemId))
+
+          // Gọi lại API để đồng bộ
+          fetchOrdersAndItems(currentTableId, true)
+
           messageApi.success(`Đã hủy món ${dishName}`)
         } catch (error) {
           messageApi.error('Lỗi khi hủy món.')
@@ -175,7 +187,7 @@ const OrderPage = () => {
     { title: 'Tên món', dataIndex: 'dish_id', render: d => d?.dish_name || '---' },
     { title: 'Giá', dataIndex: 'price', render: p => `${Number(p).toLocaleString()}đ`, width: 110 },
     { title: 'SL', dataIndex: 'quantity', width: 50, align: 'center' },
-    { title: 'Trạng thái', dataIndex: 'status', render: s => getItemStatusTag(s), width: 140 },
+    { title: 'Trạng thái', dataIndex: 'status', render: s => getItemStatusTag(s), width: 130 },
     {
       title: 'Thành tiền',
       key: 'subtotal',
@@ -186,7 +198,6 @@ const OrderPage = () => {
       title: '',
       key: 'action',
       render: (_, r) =>
-        // Ẩn nút hủy nếu món đã tiến hành làm
         !['Shipped', 'Served', 'Cancelled', 'Paid', 'Processing', 'Completed'].includes(r.status) ? (
           <Button danger icon={<DeleteOutlined />} size="small" onClick={() => handleCancelItem(r)} />
         ) : null,

@@ -14,10 +14,11 @@ const FoodDetailPage = () => {
   const queryClient = useQueryClient()
   const [currentUser, setCurrentUser] = useState(null)
 
+  // 1. Lấy thông tin user (Hỗ trợ cả Guest và Admin)
   useEffect(() => {
     try {
-      const userString = localStorage.getItem('user')
-      if (userString) {
+      const userString = localStorage.getItem('user') || localStorage.getItem('user_info')
+      if (userString && userString !== 'undefined') {
         setCurrentUser(JSON.parse(userString))
       }
     } catch (e) {
@@ -25,7 +26,6 @@ const FoodDetailPage = () => {
     }
   }, [location.search])
 
-  // --- SỬA LỖI 1: XÓA .data SAU res ---
   const {
     data: foodDetails,
     isLoading,
@@ -48,10 +48,8 @@ const FoodDetailPage = () => {
         }
       }
 
-      // Case 2: API trả về { ... dish object ... } (không có 'data' wrapper)
       if (backendData && backendData._id) {
         return {
-          // Map from backendData
           id: backendData._id,
           name: backendData.dish_name,
           imageUrl: backendData.imageUrl,
@@ -67,7 +65,6 @@ const FoodDetailPage = () => {
     staleTime: 1000 * 60 * 5,
   })
 
-  // --- SỬA LỖI 2: XÓA .data SAU res ---
   const {
     data: feedbackData,
     isLoading: isLoadingFeedbacks,
@@ -77,33 +74,18 @@ const FoodDetailPage = () => {
     queryKey: ['feedbacks', productId],
     queryFn: async () => {
       const res = await http.get(`/feedback/dish/${productId}`)
-      console.log('API GET /feedback/dish/{id} trả về:', res) // Log res (không phải res.data)
+      const backendData = res
 
-      const backendData = res // <<<--- SỬA Ở ĐÂY (bỏ .data)
-
-      // Case 1: (Từ JSON) API trả về { success: true, data: [...] }
-      if (Array.isArray(backendData?.data)) {
-        return backendData.data
-      }
-
-      // Case 2: (Giống JSON order-item) API trả về { message: '...', Feedbacks: [...] }
-      if (Array.isArray(backendData?.Feedbacks)) {
-        return backendData.Feedbacks
-      }
-
-      // Case 3: API trả về thành công nhưng mảng rỗng (không có bình luận)
-      if (backendData && (backendData.success || backendData.message)) {
-        return [] // Trả về mảng rỗng
-      }
+      if (Array.isArray(backendData?.data)) return backendData.data
+      if (Array.isArray(backendData?.Feedbacks)) return backendData.Feedbacks
+      if (backendData && (backendData.success || backendData.message)) return []
 
       throw new Error(backendData?.message || 'Cấu trúc dữ liệu bình luận không hợp lệ.')
     },
     enabled: !!productId,
     staleTime: 1000 * 60 * 2,
   })
-  // --- KẾT THÚC SỬA LỖI ---
 
-  // --- Mutation để thêm vào giỏ hàng (GIỮ NGUYÊN) ---
   const addToCartMutation = useMutation({
     mutationFn: (payload) => http.post('/cart/add-item', payload),
     onSuccess: (response, variables) => {
@@ -113,60 +95,72 @@ const FoodDetailPage = () => {
         queryClient.invalidateQueries({ queryKey: ['cart', tableId, userId] })
       }
     },
-    onError: (err, variables) => {
-      // (Xử lý lỗi giữ nguyên)
+    onError: (err) => {
       const errMsg = err.response?.data?.message || 'Có lỗi xảy ra khi thêm vào giỏ.'
       message.error(errMsg)
     },
   })
 
-  // (Các hàm handle... giữ nguyên)
   const handleIncrease = () => setQuantity((prev) => prev + 1)
   const handleDecrease = () => setQuantity((prev) => (prev > 1 ? prev - 1 : 1))
 
+  // --- HÀM THÊM VÀO GIỎ (ĐÃ SỬA LỖI USER ID) ---
   const handleAddToCart = () => {
     if (!foodDetails) {
       message.warning('Thông tin món ăn chưa sẵn sàng, vui lòng thử lại.')
       return
     }
+
+    // 1. Lấy user_id (Bắt buộc phải đăng nhập)
     let userId = null
     try {
-      const userString = localStorage.getItem('user')
-      if (!userString) {
+      // Lấy từ state currentUser đã load ở trên
+      if (currentUser) {
+        userId = currentUser._id || currentUser.id
+      } else {
+        // Fallback: Lấy trực tiếp từ localStorage nếu state chưa kịp cập nhật
+        const userString = localStorage.getItem('user') || localStorage.getItem('user_info')
+        if (userString) {
+          const userData = JSON.parse(userString)
+          userId = userData._id || userData.id
+        }
+      }
+
+      if (!userId) {
         message.warning('Bạn cần đăng nhập để thêm vào giỏ hàng.')
+        // Chuyển hướng sang trang login (nhớ thêm /flareon nếu dùng path đó)
+        navigate(`/flareon/login?redirect=${encodeURIComponent(location.pathname)}`)
         return
       }
-      userId = JSON.parse(userString)?._id
-      if (!userId) throw new Error('User ID không hợp lệ.')
     } catch (e) {
-      message.error('Lỗi khi lấy thông tin người dùng. Vui lòng thử đăng nhập lại.')
+      console.error(e)
+      message.error('Lỗi xác thực người dùng.')
       return
     }
+
     const mongoTableId = localStorage.getItem('currentTableId')
     if (!mongoTableId) {
-      message.error('Lỗi: Không tìm thấy thông tin bàn hiện tại.')
+      message.error('Vui lòng quét mã QR để chọn bàn trước khi gọi món.')
       return
     }
+
     const payload = {
       table_id: mongoTableId,
       dish_id: foodDetails._id,
       quantity: quantity,
       user_id: userId,
     }
+
     addToCartMutation.mutate({ ...payload, dishName: foodDetails.name })
   }
 
-  // (Phần render Loading/Error giữ nguyên)
-  if (isLoading) return <p>Đang tải chi tiết món ăn...</p>
-  if (isError) return <p>Lỗi khi tải món ăn: {error?.message || 'Unknown error'}</p>
-  if (!foodDetails) return <p>Không tìm thấy thông tin món ăn.</p>
+  if (isLoading) return <p className="text-center mt-10">Đang tải chi tiết món ăn...</p>
+  if (isError) return <p className="text-center mt-10 text-red-500">Lỗi: {error?.message || 'Unknown error'}</p>
+  if (!foodDetails) return <p className="text-center mt-10">Không tìm thấy thông tin món ăn.</p>
 
-  // (Phần JSX giữ nguyên)
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
-      {/* ... (Phần JSX cho thông tin món ăn và nút "Thêm vào giỏ") ... */}
       <div className="flex flex-col lg:flex-row gap-8 lg:gap-12">
-        {/* Ảnh món ăn */}
         <div className="lg:w-1/2">
           <img
             src={foodDetails.imageUrl || 'https://via.placeholder.com/600'}
@@ -174,39 +168,36 @@ const FoodDetailPage = () => {
             className="w-full h-auto object-cover rounded-lg shadow-lg"
           />
         </div>
-        {/* Thông tin món ăn */}
         <div className="lg:w-1/2 flex flex-col">
           <h1 className="text-3xl md:text-4xl font-bold text-gray-800">{foodDetails.name}</h1>
           <p className="mt-4 text-gray-600 leading-relaxed">{foodDetails.description}</p>
           <p className="mt-6 text-4xl font-bold text-orange-500">
             {(foodDetails.price ?? 0).toLocaleString('vi-VN')} ₫
           </p>
-          {/* Số lượng */}
+
           <div className="mt-8 flex items-center space-x-4">
-            <button onClick={handleDecrease} className="px-3 py-1 ...">
+            <button onClick={handleDecrease} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 font-bold text-lg">
               -
             </button>
-            <span className="w-12 text-center ...">{quantity}</span>
-            <button onClick={handleIncrease} className="px-3 py-1 ...">
+            <span className="w-12 text-center text-xl font-semibold">{quantity}</span>
+            <button onClick={handleIncrease} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 font-bold text-lg">
               +
             </button>
           </div>
-          {/* Nút Thêm vào giỏ */}
+
           <button
             onClick={handleAddToCart}
             className="mt-8 w-full bg-orange-500 text-white font-bold py-3 px-6 rounded-lg text-lg hover:bg-orange-600 transition-colors duration-300 disabled:opacity-50"
-            disabled={addToCartMutation.isLoading}
+            disabled={addToCartMutation.isPending}
           >
-            {addToCartMutation.isLoading ? 'Đang thêm...' : 'Thêm vào giỏ hàng'}
+            {addToCartMutation.isPending ? 'Đang thêm...' : 'Thêm vào giỏ hàng'}
           </button>
         </div>
       </div>
 
-      {/* === PHẦN BÌNH LUẬN === */}
       <div className="mt-12 pt-8 border-t border-gray-200">
         <h2 className="text-2xl font-bold text-gray-800 mb-6">Đánh giá & Bình luận</h2>
 
-        {/* --- DANH SÁCH BÌNH LUẬN HIỆN CÓ --- */}
         {isLoadingFeedbacks && <p>Đang tải bình luận...</p>}
         {isErrorFeedbacks && (
           <p className="text-red-500">
@@ -214,7 +205,6 @@ const FoodDetailPage = () => {
           </p>
         )}
 
-        {/* Hiển thị khi có data và data.length > 0 */}
         {feedbackData && feedbackData.length > 0 ? (
           <div className="space-y-6">
             {feedbackData.map((comment) => {
@@ -231,8 +221,7 @@ const FoodDetailPage = () => {
             })}
           </div>
         ) : (
-          // Hiển thị khi không loading, không lỗi, VÀ data là mảng rỗng
-          !isLoadingFeedbacks && !isErrorFeedbacks && <p>Chưa có đánh giá nào cho món ăn này.</p>
+          !isLoadingFeedbacks && !isErrorFeedbacks && <p className="text-gray-500 italic">Chưa có đánh giá nào cho món ăn này.</p>
         )}
       </div>
     </div>
