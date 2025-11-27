@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { useNavigate, Outlet } from 'react-router-dom'
+import { useNavigate, Outlet } from 'react-router'
 import { toast } from 'react-toastify'
 import { USER_ROLE } from '@/shared/constants/role' // Nhớ check lại đường dẫn này
 
@@ -29,9 +29,6 @@ const AdminRoute = () => {
     } else if (user.role !== USER_ROLE.ADMIN) {
       // TH2: Đã đăng nhập nhưng không phải Admin
       toast.error('Bạn không có quyền truy cập trang này!')
-
-      // Tùy chọn: Đăng xuất luôn để tránh lỗi vòng lặp nếu trang login tự động redirect
-      // localStorage.removeItem('user')
 
       navigate('/flareon', { replace: true })
     } else {

@@ -25,34 +25,38 @@ const PaymentResult = () => {
 
   useEffect(() => {
     const handleVNPayReturn = async () => {
-      // Lấy thông tin hóa đơn hiện tại để kiểm tra trạng thái
-      const invoices = await axios.get(
-        `https://api-datn-orderfood-backend-2.onrender.com/invoices/${txnRef}`
-      )
+      if (!txnRef || !secureHash || !responseCode) {
+        console.log('Không có param VNPay → Không xử lý thanh toán')
+        return
+      }
+
+      if (responseCode !== '00') {
+        console.log('Thanh toán thất bại hoặc bị hủy.')
+        return
+      }
+
+      const invoices = await axios.get(`http://localhost:8080/invoices/${txnRef}`)
 
       if (invoices?.data?.data?.status === 'unpaid') {
         if (responseCode === '00') {
           try {
             // Gọi API xác nhận thanh toán thành công
-            const result = await axios.get(
-              'https://api-datn-orderfood-backend-2.onrender.com/invoices/vnpay-return',
-              {
-                params: {
-                  vnp_TxnRef: txnRef,
-                  vnp_SecureHash: secureHash,
-                  vnp_ResponseCode: responseCode,
-                  vnp_Amount: amount,
-                  vnp_BankCode: bankCode,
-                  vnp_CardType: CardType,
-                  vnp_OrderInfo: OrderInfo,
-                  vnp_PayDate: PayDate,
-                  vnp_TmnCode: TmnCode,
-                  vnp_TransactionStatus: TransactionStatus,
-                  vnp_TransactionNo: TransactionNo,
-                  vnp_BankTranNo: BankTranNo
-                }
-              }
-            )
+            const result = await axios.get('http://localhost:8080/payment/vnpay-return', {
+              params: {
+                vnp_TxnRef: txnRef,
+                vnp_SecureHash: secureHash,
+                vnp_ResponseCode: responseCode,
+                vnp_Amount: amount,
+                vnp_BankCode: bankCode,
+                vnp_CardType: CardType,
+                vnp_OrderInfo: OrderInfo,
+                vnp_PayDate: PayDate,
+                vnp_TmnCode: TmnCode,
+                vnp_TransactionStatus: TransactionStatus,
+                vnp_TransactionNo: TransactionNo,
+                vnp_BankTranNo: BankTranNo,
+              },
+            })
             console.log('Kết quả:', result.data)
           } catch (error) {
             console.error('Lỗi gọi API:', error)
@@ -80,7 +84,7 @@ const PaymentResult = () => {
     TmnCode,
     TransactionStatus,
     TransactionNo,
-    BankTranNo
+    BankTranNo,
   ])
 
   const handleGoHome = () => {
@@ -95,7 +99,7 @@ const PaymentResult = () => {
         alignItems: 'center',
         minHeight: '100vh',
         background: 'linear-gradient(135deg, #e0f7fa, #ffffff)',
-        padding: '20px'
+        padding: '20px',
       }}
     >
       <Result
@@ -111,14 +115,14 @@ const PaymentResult = () => {
         extra={[
           <Button type="primary" key="home" onClick={handleGoHome}>
             Quay về trang chủ
-          </Button>
+          </Button>,
         ]}
         style={{
           width: '100%',
           maxWidth: 600,
           borderRadius: 16,
           boxShadow: '0 12px 24px rgba(0,0,0,0.15)',
-          background: '#fff'
+          background: '#fff',
         }}
       >
         <Descriptions

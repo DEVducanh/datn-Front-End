@@ -35,14 +35,10 @@ const FoodDetailPage = () => {
     queryKey: ['dish', productId],
     queryFn: async () => {
       const res = await http.get(`/dishes/${productId}`)
-      console.log('API GET /dishes/{id} trả về:', res) // Log res (không phải res.data)
+      const backendData = res
 
-      const backendData = res // <<<--- SỬA Ở ĐÂY (bỏ .data)
-
-      // Case 1: API trả về { message: '...', data: {...} }
       if (backendData && backendData.data) {
         return {
-          // Map from backendData.data
           id: backendData.data._id,
           name: backendData.data.dish_name,
           imageUrl: backendData.data.imageUrl,

@@ -4,7 +4,7 @@ import http from '@/apis/http'
 import { Input, Spin } from 'antd'
 import { Search } from 'lucide-react'
 import ProductGrid from '@/layouts/DefaultLayout/components/ProductGrid'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router'
 import { useMessage } from '@/contexts/MessageProvider' // <--- 1. Import lại hook message
 
 const HERO_IMAGE_URL =
@@ -30,7 +30,9 @@ const CategorySidebar = ({ selectedId, onSelectCategory }) => {
     <div className="bg-white p-4 rounded-lg shadow-sm sticky top-24">
       <h3 className="text-xl font-bold mb-4 text-gray-800">Danh mục</h3>
       {isLoading ? (
-        <div className="flex justify-center p-4"><Spin /></div>
+        <div className="flex justify-center p-4">
+          <Spin />
+        </div>
       ) : (
         <ul className="space-y-2">
           <li>
@@ -57,7 +59,7 @@ const CategorySidebar = ({ selectedId, onSelectCategory }) => {
   )
 }
 
-// --- COMPONENT CHÍNH ---
+// --- COMPONENT TRANG CATEGORY CHÍNH ---
 const CategoryPage = () => {
   const { tableId: qrCode } = useParams()
   const navigate = useNavigate()
@@ -82,7 +84,12 @@ const CategoryPage = () => {
   }, [qrCode, navigate, location.pathname])
 
   // --- 2. Lấy danh sách món ăn ---
-  const { data: products = [], isLoading, isError, error } = useQuery({
+  const {
+    data: products = [],
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
     queryKey: ['dishes'],
     queryFn: async () => {
       const res = await http.get('/dishes')
@@ -127,7 +134,9 @@ const CategoryPage = () => {
       const status = err.response?.status
       if (status === 401) {
         message.warning('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.')
-        navigate(`/flareon/login?redirect=${encodeURIComponent(location.pathname + location.search)}`)
+        navigate(
+          `/flareon/login?redirect=${encodeURIComponent(location.pathname + location.search)}`
+        )
       } else {
         message.error(err.response?.data?.message || 'Lỗi thêm vào giỏ hàng')
       }
@@ -137,22 +146,23 @@ const CategoryPage = () => {
   // --- 5. Xử lý nút Thêm ---
   const handleAddToCart = (product) => {
     // A. Lấy User ID
-    let userId = null
-    try {
-      const userString = localStorage.getItem('user') || localStorage.getItem('user_info')
+    // let userId = null
+    // try {
+    //   const userString = localStorage.getItem('user') || localStorage.getItem('user_info')
 
-      if (!userString) {
-        message.warning('Bạn cần đăng nhập để gọi món.')
-        navigate(`/flareon/login?redirect=${encodeURIComponent(location.pathname + location.search)}`)
-        return
-      }
-      const userData = JSON.parse(userString)
-      userId = userData?._id
-    } catch (e) {
-      console.error(e)
-    }
+    //   if (!userString) {
+    //     message.warning('Bạn cần đăng nhập để gọi món.')
+    //     navigate(
+    //       `/flareon/login?redirect=${encodeURIComponent(location.pathname + location.search)}`
+    //     )
+    //     return
+    //   }
+    //   const userData = JSON.parse(userString)
+    //   userId = userData?._id
+    // } catch (e) {
+    //   console.error(e)
+    // }
 
-    // B. Lấy Table ID
     const tableIdToSend = localStorage.getItem('currentTableId') || qrCode
 
     if (!tableIdToSend) {
@@ -166,18 +176,28 @@ const CategoryPage = () => {
       dish_id: product._id,
       quantity: 1,
       user_id: userId,
-      dishName: product.name
+      dishName: product.name,
     })
   }
 
-  if (isLoading) return <div className="p-10 text-center"><Spin tip="Đang tải thực đơn..." /></div>
-  if (isError) return <div className="p-10 text-center text-red-500">Lỗi tải dữ liệu: {error.message}</div>
+  if (isLoading)
+    return (
+      <div className="p-10 text-center">
+        <Spin tip="Đang tải thực đơn..." />
+      </div>
+    )
+  if (isError)
+    return <div className="p-10 text-center text-red-500">Lỗi tải dữ liệu: {error.message}</div>
 
   return (
     <div className="bg-gray-50 min-h-screen">
       {/* Hero Section */}
       <div className="relative h-64 bg-gray-800">
-        <img src={HERO_IMAGE_URL} alt="Menu" className="absolute inset-0 w-full h-full object-cover opacity-40" />
+        <img
+          src={HERO_IMAGE_URL}
+          alt="Menu"
+          className="absolute inset-0 w-full h-full object-cover opacity-40"
+        />
         <div className="relative z-10 h-full flex flex-col justify-center items-center text-center px-4">
           <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
             {qrCode ? `Thực đơn (Bàn: ${qrCode})` : 'Khám phá Thực đơn'}
@@ -194,8 +214,12 @@ const CategoryPage = () => {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-8 py-8 px-4">
+        {/* CỘT 1: SIDEBAR DANH MỤC */}
         <aside className="w-full md:w-1/4 lg:w-1/5">
-          <CategorySidebar selectedId={selectedCategoryId} onSelectCategory={setSelectedCategoryId} />
+          <CategorySidebar
+            selectedId={selectedCategoryId}
+            onSelectCategory={setSelectedCategoryId} // Truyền hàm set state xuống
+          />
         </aside>
 
         <main className="w-full md:w-3/4 lg:w-4/5">

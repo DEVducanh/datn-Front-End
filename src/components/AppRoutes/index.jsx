@@ -45,10 +45,7 @@ const AppRoutes = () => {
         {/* Redirect root to /flareon */}
         <Route path="/" element={<Navigate to="/flareon" replace />} />
 
-        {/* --- 2. Route cho trang đăng nhập khách hàng (Quét QR) --- */}
-        {/* Đặt ở ngoài DefaultLayout để nó hiển thị full màn hình */}
         <Route path="/guest-login" element={<GuestLogin />} />
-
 
         {/* Admin Routes */}
         <Route element={<AdminRoute />}>

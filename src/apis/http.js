@@ -2,7 +2,7 @@
 import axios from 'axios'
 
 const http = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'https://api-datn-orderfood-backend-2.onrender.com',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
@@ -12,7 +12,10 @@ const http = axios.create({
 // Request Interceptor (Gửi đi)
 http.interceptors.request.use(
   function (config) {
-    const token = localStorage.getItem('access_token') || localStorage.getItem('userToken') || localStorage.getItem('token')
+    const token =
+      localStorage.getItem('access_token') ||
+      localStorage.getItem('userToken') ||
+      localStorage.getItem('token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -30,10 +33,9 @@ http.interceptors.response.use(
     // console.log("Headers nhận được:", response.headers)
 
     // 2. Lấy token (Thử cả viết hoa và viết thường cho chắc ăn)
-    const guestToken = response.headers['x-guest-token'] || response.headers['X-Guest-Token'];
-    
+    const guestToken = response.headers['x-guest-token'] || response.headers['X-Guest-Token']
+
     if (guestToken) {
-      console.log("🔥 Đã bắt được Guest Token:", guestToken)
       localStorage.setItem('access_token', guestToken)
     }
 

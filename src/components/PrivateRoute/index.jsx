@@ -1,6 +1,6 @@
 import { USER_ROLE } from '@/shared/constants/role'
 import React, { useEffect, useState } from 'react'
-import { Navigate, Outlet, useLocation } from 'react-router-dom'
+import { Navigate, Outlet, useLocation } from 'react-router'
 import { toast } from 'react-toastify'
 
 const PrivateRoute = ({ allowedRoles = [] }) => {

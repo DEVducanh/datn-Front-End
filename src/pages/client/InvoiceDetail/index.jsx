@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import http from '@/apis/http'
 import { Spin, Alert, Button, Tag, Table } from 'antd'

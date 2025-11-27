@@ -28,7 +28,11 @@ const getStoredUser = () => {
 
 // Hàm tiện ích lấy token
 const getStoredToken = () => {
-  return localStorage.getItem('access_token') || localStorage.getItem('userToken') || localStorage.getItem('token')
+  return (
+    localStorage.getItem('access_token') ||
+    localStorage.getItem('userToken') ||
+    localStorage.getItem('token')
+  )
 }
 
 // 3. Provider Component

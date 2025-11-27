@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react'
 import { Modal, List, Spin, Alert } from 'antd'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate, useLocation } from 'react-router-dom' // Thêm useLocation
+import { useNavigate, useLocation } from 'react-router' // Thêm useLocation
 import { Receipt, ChevronRight } from 'lucide-react'
 import invoiceAPI from '@/apis/invoice/invoice.api'
 
@@ -35,22 +35,18 @@ const OrderHistoryModal = ({ isOpen, onClose }) => {
     return params.get('table_id') || 'unknown_table'
   }, [location.search])
 
-
   const {
     data: completedInvoices = [],
     isLoading,
     isError,
     error,
   } = useQuery({
-   
     queryKey: ['invoices', userId, tableId, 'history_realtime'],
 
     queryFn: async () => {
       if (!userId) return []
 
- 
       const res = await invoiceAPI.getAll({ status: 'completed' })
-
 
       let data = []
       if (res && res.data && Array.isArray(res.data.data)) data = res.data.data

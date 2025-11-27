@@ -3,7 +3,7 @@ import { Modal, Button, Typography, message } from 'antd'
 import { Wallet, QrCode, Store, Check, ChevronRight, Receipt } from 'lucide-react'
 import { useMutation } from '@tanstack/react-query'
 import http from '@/apis/http'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 
 const { Text } = Typography
 
@@ -13,12 +13,13 @@ const PaymentModal = ({ visible, onClose, items = [] }) => {
 
   const { totalAmount, orderIdsToPay } = useMemo(() => {
     // Lọc món 'Shipped' hoặc 'Served' (Cả 2 đều hiểu là Đã phục vụ)
-    const servedItems = items.filter(item =>
-      (item.status === 'Shipped' || item.status === 'Served') && item.orderStatus !== 'Paid'
-    );
+    const servedItems = items.filter(
+      (item) =>
+        (item.status === 'Shipped' || item.status === 'Served') && item.orderStatus !== 'Paid'
+    )
 
-    const total = servedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const uniqueOrderIds = [...new Set(servedItems.map(item => item.orderId))];
+    const total = servedItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+    const uniqueOrderIds = [...new Set(servedItems.map((item) => item.orderId))]
 
     return { totalAmount: total, orderIdsToPay: uniqueOrderIds }
   }, [items])
@@ -26,7 +27,7 @@ const PaymentModal = ({ visible, onClose, items = [] }) => {
   const createInvoiceMutation = useMutation({
     mutationFn: (payload) => http.post('/invoices', payload),
     onSuccess: (res) => {
-      const paymentUrl = res.data?.paymentUrl || res.paymentUrl || res.data?.url || res.url;
+      const paymentUrl = res.data?.paymentUrl || res.paymentUrl || res.data?.url || res.url
       if (paymentMethod === 'VnPay' && paymentUrl) {
         window.location.href = paymentUrl
       } else {
@@ -52,8 +53,8 @@ const PaymentModal = ({ visible, onClose, items = [] }) => {
       }
     },
     onError: (error) => {
-      const msg = error.response?.data?.message || 'Lỗi tạo hóa đơn.';
-      message.error(`Lỗi: ${msg}`);
+      const msg = error.response?.data?.message || 'Lỗi tạo hóa đơn.'
+      message.error(`Lỗi: ${msg}`)
     },
   })
 
@@ -63,13 +64,13 @@ const PaymentModal = ({ visible, onClose, items = [] }) => {
       return
     }
 
-    let methodString = 'Cash';
-    if (paymentMethod === 'VnPay') methodString = 'VNPAY';
+    let methodString = 'Cash'
+    if (paymentMethod === 'VnPay') methodString = 'VNPAY'
 
     const payload = {
       order_ids: orderIdsToPay,
       method: methodString,
-      amount: totalAmount
+      amount: totalAmount,
     }
 
     createInvoiceMutation.mutate(payload)
@@ -110,9 +111,7 @@ const PaymentModal = ({ visible, onClose, items = [] }) => {
           <div className="text-4xl font-extrabold text-green-700 mt-2 tracking-tight">
             {totalAmount.toLocaleString('vi-VN')} <span className="text-2xl align-top">đ</span>
           </div>
-          <div className="text-xs text-gray-500 mt-2">
-            (Chỉ tính các món đã mang ra bàn)
-          </div>
+          <div className="text-xs text-gray-500 mt-2">(Chỉ tính các món đã mang ra bàn)</div>
         </div>
 
         <div className="flex flex-col gap-3">
@@ -148,4 +147,4 @@ const PaymentModal = ({ visible, onClose, items = [] }) => {
   )
 }
 
-export default PaymentModal 
+export default PaymentModal

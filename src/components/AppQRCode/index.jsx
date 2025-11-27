@@ -7,12 +7,10 @@ const { Text, Title } = Typography
 const AppQRCode = ({ tableId, tableName }) => {
   const baseUrl = window.location.origin
 
-  // 1. Kiểm tra xem có ID bàn không
   if (!tableId) {
     return <Alert type="error" message="Lỗi: Thiếu ID bàn" showIcon />
   }
 
-  // 2. Tạo URL chuẩn
   const qrCodeUrl = `${baseUrl}/flareon?table_id=${tableId}`
 
   const downloadQRCode = () => {
@@ -30,13 +28,7 @@ const AppQRCode = ({ tableId, tableName }) => {
 
   return (
     <div style={{ textAlign: 'center' }} id={`qr-code-${tableId}`}>
-      <QRCode
-        value={qrCodeUrl}
-        size={180}
-        errorLevel="M"
-        icon="/images/Logo.png"
-        iconSize={30}
-      />
+      <QRCode value={qrCodeUrl} size={180} errorLevel="M" icon="/images/Logo.png" iconSize={30} />
 
       <Title level={5} style={{ marginTop: 10, marginBottom: 0 }}>
         {tableName || 'Bàn ???'}
@@ -50,7 +42,10 @@ const AppQRCode = ({ tableId, tableName }) => {
       </div>
 
       <Tooltip title="Tải xuống">
-        <a onClick={downloadQRCode} style={{ fontSize: 14, color: '#fa8c16', fontWeight: 'bold', cursor: 'pointer' }}>
+        <a
+          onClick={downloadQRCode}
+          style={{ fontSize: 14, color: '#fa8c16', fontWeight: 'bold', cursor: 'pointer' }}
+        >
           <DownloadOutlined /> Tải xuống QR
         </a>
       </Tooltip>

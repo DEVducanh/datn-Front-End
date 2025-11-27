@@ -1,41 +1,49 @@
 // src/layouts/DefaultLayout/components/Header/index.jsx
 import React, { useState, useMemo } from 'react'
-import { FlameKindling, Menu, X, Clock, ShoppingCart, User, Receipt, LogOut } from 'lucide-react'
-import { Modal, List, Button, Badge, Avatar, Dropdown } from 'antd' // <<<--- Bỏ Spin
+import { FlameKindling, Menu, X, Clock, ShoppingCart, Receipt, LogOut } from 'lucide-react'
+import { Button, Badge, Avatar, Dropdown } from 'antd' // <<<--- Bỏ Spin
 import AntButton from '@/components/AntButton'
 import { useQuery } from '@tanstack/react-query'
 import http from '@/apis/http'
-import { UserOutlined } from '@ant-design/icons'
 import { useAuth } from '@/contexts/AuthContext'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink } from 'react-router'
 import OrderHistoryModal from '../OrderHistoryModal'
+import { jwtDecode } from 'jwt-decode'
+import { useNavigate } from 'react-router'
 
 const Header = () => {
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const [isModalOpen, setIsModalOpen] = useState(false) // <<<--- State này vẫn giữ
   const navigate = useNavigate()
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [isModalOpen, setIsModalOpen] = useState(false)
   const { isLoggedIn, user, logout } = useAuth()
-
-  // --- LẤY ID VÀ DỮ LIỆU GIỎ HÀNG (Giữ nguyên) ---
   const mongoTableId = localStorage.getItem('currentTableId')
-  const userString = localStorage.getItem('user')
-  const userData = useMemo(() => (userString ? JSON.parse(userString) : null), [userString])
-  const userId = userData?._id
-  const userName = userData?.username || 'Tài khoản'
+  const token = localStorage.getItem('access_token')
+
+  const userData = useMemo(() => {
+    if (!token) return null
+    try {
+      return jwtDecode(token)
+    } catch (error) {
+      console.error('Token decode error:', error)
+      return null
+    }
+  }, [token])
+
+  console.log(userData)
 
   // --- Query lấy giỏ hàng (Giữ nguyên) ---
   const { data: cartData } = useQuery({
-    queryKey: ['cart', mongoTableId, userId],
+    queryKey: ['cart', mongoTableId],
     queryFn: async () => {
-      if (!mongoTableId || !userId) return null
+      if (!mongoTableId) return null
       try {
-        const res = await http.get(`/cart/cart-item/${mongoTableId}/${userId}`)
+        const res = await http.get(`/cart/cart-item/${mongoTableId}`)
         return res?.data
       } catch (error) {
         return null
       }
     },
-    enabled: !!mongoTableId && !!userId,
+    enabled: !!mongoTableId,
   })
 
   // Tính tổng số lượng (Giữ nguyên)
@@ -46,10 +54,9 @@ const Header = () => {
 
   // Hàm Đăng xuất (Giữ nguyên)
   const handleLogout = () => {
-    localStorage.removeItem('user')
-    localStorage.removeItem('userToken')
     localStorage.removeItem('currentTableId')
-    localStorage.removeItem('currentQrCode')
+    localStorage.removeItem('jwt_token')
+    localStorage.removeItem('access_token')
     window.location.href = '/flareon/login'
   }
   const userMenuItems = [
@@ -79,8 +86,8 @@ const Header = () => {
   const UserDropdown = () => (
     <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" arrow trigger={['click']}>
       <div className="flex items-center gap-2 cursor-pointer p-2 rounded-full hover:bg-gray-100 transition-colors">
-        <Avatar>{userData?.username?.charAt(0).toUpperCase() || <UserOutlined />}</Avatar>
-        <span className="hidden lg:inline text-gray-700 font-semibold">{userName}</span>
+        {/* <Avatar>{userData?.username?.charAt(0).toUpperCase() || <UserOutlined />}</Avatar> */}
+        {/* <span className="hidden lg:inline text-gray-700 font-semibold">{userName}</span> */}
       </div>
     </Dropdown>
   )

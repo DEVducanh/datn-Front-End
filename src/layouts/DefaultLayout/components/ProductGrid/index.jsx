@@ -1,17 +1,13 @@
-// src/layouts/DefaultLayout/components/ProductGrid/index.jsx
 import React from 'react'
-import { useNavigate } from 'react-router-dom' // <<< 1. IMPORT
+import { useNavigate } from 'react-router' // <<< 1. IMPORT
 import { ShoppingCart } from 'lucide-react'
 
-// Hàm format tiền (ví dụ, bạn có thể đã có)
 const formatVnd = (n) => (n || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + 'đ'
 
 const ProductGrid = ({ products, onAddToCart }) => {
-  const navigate = useNavigate() // <<< 2. KHỞI TẠO
+  const navigate = useNavigate()
 
-  // --- 3. TẠO HÀM XỬ LÝ CLICK ---
   const handleProductClick = (productId) => {
-    // Giả sử đường dẫn của bạn là /flareon/dishes/:id
     navigate(`/flareon/product/${productId}`)
   }
 
