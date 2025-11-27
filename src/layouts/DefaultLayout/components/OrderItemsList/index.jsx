@@ -1,6 +1,5 @@
-// src/components/OrderItemsList/index.jsx
 import React from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import http from '@/apis/http'
 import { Spin, Alert, Button, List as AntList } from 'antd'

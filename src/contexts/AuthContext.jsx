@@ -1,9 +1,9 @@
-import { createContext, useContext, useState } from 'react'
+import { createContext, useContext, useState, useEffect } from 'react'
 
 // 1. Tạo Context Object
 const AuthContext = createContext(null)
 
-// 2. Custom Hook: Giúp các component dễ dàng sử dụng Context
+// 2. Custom Hook
 export const useAuth = () => {
   const context = useContext(AuthContext)
   if (!context) {
@@ -12,63 +12,92 @@ export const useAuth = () => {
   return context
 }
 
-// Hàm tiện ích để lấy user từ Local Storage
+// Hàm tiện ích lấy user (Hỗ trợ cả user thường và user_info của khách)
 const getStoredUser = () => {
-  const userString = localStorage.getItem('user')
-  if (userString) {
-    try {
+  try {
+    // Ưu tiên lấy 'user' (admin/staff), nếu không có thì lấy 'user_info' (khách)
+    const userString = localStorage.getItem('user') || localStorage.getItem('user_info')
+    if (userString && userString !== 'undefined') {
       return JSON.parse(userString)
-    } catch (error) {
-      console.error('Lỗi parse user từ Local Storage:', error)
-      return null
     }
+  } catch (error) {
+    console.error('Lỗi parse user:', error)
   }
   return null
 }
 
-// 3. Provider Component: Quản lý trạng thái và Local Storage
+// Hàm tiện ích lấy token
+const getStoredToken = () => {
+  return (
+    localStorage.getItem('access_token') ||
+    localStorage.getItem('userToken') ||
+    localStorage.getItem('token')
+  )
+}
+
+// 3. Provider Component
 export const AuthProvider = ({ children }) => {
-  // Khởi tạo trạng thái: Kiểm tra Local Storage ngay khi component được tạo
-  const initialIsLoggedIn = !!localStorage.getItem('userToken')
+  // Khởi tạo state từ localStorage
+  const [user, setUser] = useState(getStoredUser)
+  const [isLoggedIn, setIsLoggedIn] = useState(!!getStoredToken())
 
-  // Trạng thái cục bộ: true nếu có token, false nếu không
-  const [isLoggedIn, setIsLoggedIn] = useState(initialIsLoggedIn)
-
-  // BỔ SUNG: State để lưu thông tin người dùng trực tiếp
-  const [user, setUser] = useState(getStoredUser) // Lấy user từ localStorage khi khởi tạo
-
-  // Hàm Đăng nhập: Lưu token và cập nhật trạng thái
-  const login = (token, user) => {
+  // Hàm Đăng nhập (Dùng chung cho cả Admin và Khách)
+  const login = (token, userData) => {
+    // 1. Lưu token chuẩn vào access_token
+    localStorage.setItem('access_token', token)
+    // (Giữ lại userToken để tương thích code cũ nếu cần)
     localStorage.setItem('userToken', token)
 
-    if (user) {
-      localStorage.setItem('user', JSON.stringify(user))
-      setUser(user) // Cập nhật state user
+    // 2. Lưu thông tin user
+    if (userData) {
+      // Lưu vào cả 2 key để đảm bảo code cũ/mới đều chạy
+      localStorage.setItem('user', JSON.stringify(userData))
+      localStorage.setItem('user_info', JSON.stringify(userData))
+      setUser(userData)
     }
 
     setIsLoggedIn(true)
   }
 
-  // Hàm Đăng xuất: Xóa token và cập nhật trạng thái
+  // Hàm Đăng xuất
   const logout = () => {
-    console.log('ĐÃ CLICK ĐĂNG XUẤT!')
+    console.log('ĐÃ ĐĂNG XUẤT')
+    // Xóa sạch mọi dấu vết
+    localStorage.removeItem('access_token')
     localStorage.removeItem('userToken')
+    localStorage.removeItem('token')
     localStorage.removeItem('user')
-    localStorage.removeItem('currentTableId')
+    localStorage.removeItem('user_info')
+    localStorage.removeItem('currentTableId') // Xóa luôn mã bàn để reset
+
     setIsLoggedIn(false)
-    setUser(null) // Xóa state user
+    setUser(null)
+
+    // Reload trang để reset toàn bộ state của ứng dụng
+    window.location.href = '/flareon'
   }
 
-  // Tùy chọn: Hàm này đơn giản là trả về state user
+  // useEffect để đồng bộ state nếu localStorage bị thay đổi bên ngoài
+  useEffect(() => {
+    const token = getStoredToken()
+    const userData = getStoredUser()
+
+    if (token && !isLoggedIn) {
+      setIsLoggedIn(true)
+    }
+    if (userData && !user) {
+      setUser(userData)
+    }
+  }, [])
+
   const getUser = () => user
 
-  // Giá trị được cung cấp cho toàn bộ ứng dụng
   const contextValue = {
-    isLoggedIn, // Trạng thái đăng nhập
+    isLoggedIn,
     user,
-    login, // Hàm để component Đăng nhập gọi
-    logout, // Hàm để component Header/Đăng xuất gọi
-    getUser, // Hàm để truy xuất (tùy chọn nếu bạn muốn tách logic)
+    login,
+    logout,
+    getUser,
   }
 
   return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>

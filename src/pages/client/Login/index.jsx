@@ -20,9 +20,7 @@ const Login = () => {
 
   const loginMutation = useMutation({
     mutationFn: (payload) => authAPI.login(payload),
-
     onSuccess: (data) => {
-      // Giả định Backend trả về: { token: '...', user: { _id: '...', ... } }
       const token = data.token || data.accessToken
       const userObject = data.user
 
@@ -50,7 +48,7 @@ const Login = () => {
     },
   })
 
-  // 3. Hàm xử lý sự kiện submit form
+
   const onFinish = (values) => {
     const payload = {
       email: values.email,

@@ -1,223 +1,413 @@
 import React, { useMemo } from 'react'
-import { Layout, Card, Statistic, Table, Tag, Progress, Avatar, List, Breadcrumb } from 'antd'
-const { Content } = Layout
+import { useQuery } from '@tanstack/react-query'
+import { Card, Table, Tag, Progress, List, Avatar, Spin, Statistic } from 'antd'
+import {
+  DollarSign,
+  TrendingUp,
+  ShoppingBag,
+  Activity,
+  CheckCircle,
+  XCircle,
+  Clock,
+  User,
+} from 'lucide-react'
+import invoiceAPI from '@/apis/invoice/invoice.api'
 
-const revenueData = [
-  { key: '1', month: 'Jan', revenue: 12000, growth: 12 },
-  { key: '2', month: 'Feb', revenue: 14500, growth: 8 },
-  { key: '3', month: 'Mar', revenue: 15800, growth: 5 },
-  { key: '4', month: 'Apr', revenue: 17600, growth: 9 },
-  { key: '5', month: 'May', revenue: 16900, growth: -4 },
-  { key: '6', month: 'Jun', revenue: 19400, growth: 13 },
-]
+// Format tiền tệ
+const formatVnd = (n) => (n || 0).toLocaleString('vi-VN') + 'đ'
 
-const orders = [
-  {
-    key: 'a1',
-    orderId: '#INV-1042',
-    customer: 'Nguyen Van A',
-    status: 'Shipped',
-    total: 2450000,
-  },
-  {
-    key: 'a2',
-    orderId: '#INV-1043',
-    customer: 'Tran Thi B',
-    status: 'Pending',
-    total: 990000,
-  },
-  {
-    key: 'a3',
-    orderId: '#INV-1044',
-    customer: 'Le Van C',
-    status: 'Cancelled',
-    total: 0,
-  },
-  {
-    key: 'a5',
-    orderId: '#INV-1045',
-    customer: 'Pham D',
-    status: 'Processing',
-    total: 1200000,
-  },
-]
+// Hàm tính thời gian
+const timeAgo = (dateString) => {
+  if (!dateString) return 'Vừa xong'
+  const date = new Date(dateString)
+  const seconds = Math.floor((new Date() - date) / 1000)
 
-const activities = [
-  { id: 1, user: 'Minh', action: 'created a new order', time: '2m' },
-  { id: 2, user: 'Linh', action: 'updated product price', time: '10m' },
-  { id: 3, user: 'Kien', action: 'published a campaign', time: '1h' },
-  { id: 4, user: 'Trung', action: 'added 3 new users', time: '2h' },
-]
-
-function k(v) {
-  return new Intl.NumberFormat('vi-VN').format(v)
+  let interval = seconds / 31536000
+  if (interval > 1) return Math.floor(interval) + ' năm trước'
+  interval = seconds / 2592000
+  if (interval > 1) return Math.floor(interval) + ' tháng trước'
+  interval = seconds / 86400
+  if (interval > 1) return Math.floor(interval) + ' ngày trước'
+  interval = seconds / 3600
+  if (interval > 1) return Math.floor(interval) + ' giờ trước'
+  interval = seconds / 60
+  if (interval > 1) return Math.floor(interval) + ' phút trước'
+  return 'Vừa xong'
 }
 
-function Sparkline({ values }) {
-  const max = Math.max(...values)
-  const min = Math.min(...values)
-  const points = values
-    .map((v, i) => {
-      const x = (i / (values.length - 1)) * 100
-      const y = 40 - ((v - min) / (max - min || 1)) * 40 // 0..40 px
-      return `${x},${y}`
+// --- HÀM LẤY TÊN KHÁCH (QUÉT SẠCH MỌI TRƯỜNG DỮ LIỆU) ---
+const getCustomerName = (record) => {
+  if (!record) return 'Khách vãng lai'
+
+  // Hàm phụ: Tìm tên trong 1 object bất kỳ
+  const extractName = (obj) => {
+    if (!obj) return null
+    // Ưu tiên name -> full_name -> username -> email
+    return obj.name || obj.full_name || obj.username || obj.email || obj.display_name
+  }
+
+  // 1. Tìm trong field 'user' (Thường gặp nhất)
+  if (record.user && typeof record.user === 'object') {
+    const name = extractName(record.user)
+    if (name) return name
+  }
+
+  // 2. Tìm trong field 'user_id' (Nếu backend trả về populate)
+  if (record.user_id && typeof record.user_id === 'object') {
+    const name = extractName(record.user_id)
+    if (name) return name
+  }
+
+  // 3. Tìm trong order_id (Nếu lồng nhau)
+  const order = Array.isArray(record.order_id) ? record.order_id[0] : record.order_id
+  if (order) {
+    if (order.user && typeof order.user === 'object') {
+      const name = extractName(order.user)
+      if (name) return name
+    }
+    if (order.user_id && typeof order.user_id === 'object') {
+      const name = extractName(order.user_id)
+      if (name) return name
+    }
+  }
+
+  // 4. Nếu vẫn không thấy object, kiểm tra xem có string ID không
+  if (typeof record.user === 'string') return `Khách (ID: ${record.user.slice(-4)})`
+  if (typeof record.user_id === 'string') return `Khách (ID: ${record.user_id.slice(-4)})`
+
+  // 5. Đường cùng
+  return 'Khách vãng lai'
+}
+
+const Dashboard = () => {
+  const { data: invoices = [], isLoading } = useQuery({
+    queryKey: ['invoices', 'dashboard_final_fix_name'],
+    queryFn: async () => {
+      try {
+        const res = await invoiceAPI.getAll()
+        if (res?.data?.data) return res.data.data
+        if (res?.data) return res.data
+        return res || []
+      } catch (err) {
+        return []
+      }
+    },
+    staleTime: 1000 * 60 * 2,
+  })
+
+  const { stats, activities } = useMemo(() => {
+    const now = new Date()
+    const currentMonth = now.getMonth()
+    const currentYear = now.getFullYear()
+
+    let result = {
+      revenue: 0,
+      totalOrders: 0,
+      successOrders: 0,
+      cancelledOrders: 0,
+      growth: 0,
+      kpiTarget: 1000000,
+      kpiPercent: 0,
+      recentOrders: [],
+    }
+
+    if (!invoices || invoices.length === 0) return { stats: result, activities: [] }
+
+    const thisMonthInvoices = []
+    const lastMonthInvoices = []
+    let firstOrderDate = now
+
+    invoices.forEach((inv) => {
+      const dateStr = inv.created_at || inv.createdAt
+      if (!dateStr) return
+
+      const d = new Date(dateStr)
+      if (d < firstOrderDate) firstOrderDate = d
+
+      if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
+        thisMonthInvoices.push(inv)
+      }
+
+      const lastMonthIndex = currentMonth === 0 ? 11 : currentMonth - 1
+      const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear
+      if (d.getMonth() === lastMonthIndex && d.getFullYear() === lastMonthYear) {
+        lastMonthInvoices.push(inv)
+      }
     })
-    .join(' ')
 
-  return (
-    <svg viewBox="0 0 100 40" className="w-full h-10">
-      <polyline points={points} fill="none" strokeWidth="2" />
-    </svg>
-  )
-}
+    // Doanh thu
+    const calculateRevenue = (list) =>
+      list
+        .filter((inv) => {
+          const status = (inv.status || '').toLowerCase().trim()
+          return status === 'paid' || status === 'completed'
+        })
+        .reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0)
 
-export default function Dashboard() {
-  const revenue = useMemo(() => revenueData.reduce((acc, r) => acc + r.revenue, 0), [])
-  const growth = useMemo(
-    () => revenueData.reduce((acc, r) => acc + r.growth, 0) / revenueData.length,
-    []
-  )
+    const revenueThisMonth = calculateRevenue(thisMonthInvoices)
+    const revenueLastMonth = calculateRevenue(lastMonthInvoices)
+
+    // Tăng trưởng
+    let growthRate = 0
+    if (revenueLastMonth > 0) {
+      growthRate = ((revenueThisMonth - revenueLastMonth) / revenueLastMonth) * 100
+    }
+
+    // KPI
+    const monthsDiff =
+      (currentYear - firstOrderDate.getFullYear()) * 12 + (currentMonth - firstOrderDate.getMonth())
+    const kpiTarget = 1000000 + Math.max(0, monthsDiff) * 1000000
+    const kpiPercent =
+      kpiTarget > 0 ? Math.min(100, Math.round((revenueThisMonth / kpiTarget) * 100)) : 0
+
+    // Số liệu khác
+    const successOrders = thisMonthInvoices.filter((i) =>
+      ['paid', 'completed'].includes((i.status || '').toLowerCase())
+    ).length
+    const cancelledOrders = thisMonthInvoices.filter((i) =>
+      ['cancelled', 'rejected'].includes((i.status || '').toLowerCase())
+    ).length
+
+    // Sắp xếp
+    const sortedAll = [...invoices].sort((a, b) => {
+      const dateA = new Date(a.created_at || a.createdAt || 0)
+      const dateB = new Date(b.created_at || b.createdAt || 0)
+      return dateB - dateA
+    })
+
+    result = {
+      revenue: revenueThisMonth,
+      totalOrders: thisMonthInvoices.length,
+      successOrders,
+      cancelledOrders,
+      growth: growthRate,
+      kpiTarget,
+      kpiPercent,
+      recentOrders: sortedAll.slice(0, 5),
+    }
+
+    // Hoạt động gần đây (Activity Log)
+    const act = sortedAll.slice(0, 5).map((inv) => {
+      const name = getCustomerName(inv) // Sử dụng hàm đã fix
+      const dateStr = inv.created_at || inv.createdAt
+      const firstChar = name ? name.charAt(0).toUpperCase() : 'K'
+
+      return {
+        user: name,
+        amount: inv.total_amount,
+        time: timeAgo(dateStr),
+        avatar: firstChar,
+        status: (inv.status || '').toLowerCase(),
+      }
+    })
+
+    return { stats: result, activities: act }
+  }, [invoices])
 
   const columns = [
     {
       title: 'Mã đơn',
-      dataIndex: 'orderId',
-      key: 'orderId',
-      render: (v) => <span className="font-medium">{v}</span>,
+      dataIndex: '_id',
+      key: '_id',
+      render: (id) => (
+        <span className="font-mono text-gray-500">#{id ? id.slice(-6).toUpperCase() : '...'}</span>
+      ),
     },
     {
       title: 'Khách hàng',
-      dataIndex: 'customer',
       key: 'customer',
+      render: (_, record) => (
+        <span className="font-medium text-gray-700">{getCustomerName(record)}</span>
+      ),
     },
     {
       title: 'Trạng thái',
       dataIndex: 'status',
       key: 'status',
       render: (status) => {
-        const map = {
-          Shipped: 'green',
-          Processing: 'blue',
-          Pending: 'gold',
-          Cancelled: 'red',
-        }
-        return <Tag color={map[status] || 'default'}>{status}</Tag>
+        const s = (status || '').toLowerCase()
+        let color = 'default'
+        if (s === 'paid' || s === 'completed') color = 'success'
+        else if (s === 'unpaid' || s === 'pending') color = 'warning'
+        else if (s === 'cancelled') color = 'error'
+        return <Tag color={color}>{(status || 'UNKNOWN').toUpperCase()}</Tag>
       },
     },
     {
-      title: 'Tổng tiền (₫)',
-      dataIndex: 'total',
-      key: 'total',
+      title: 'Tổng tiền',
+      dataIndex: 'total_amount',
+      key: 'total_amount',
       align: 'right',
-      render: (v) => k(v),
-      sorter: (a, b) => a.total - b.total,
+      render: (amount) => <span className="font-bold text-gray-700">{formatVnd(amount)}</span>,
     },
   ]
 
+  if (isLoading)
+    return (
+      <div className="flex justify-center p-20">
+        <Spin size="large" tip="Đang tải..." />
+      </div>
+    )
+
+  const currentMonthDisplay = new Date().getMonth() + 1
+
   return (
-    <div className="h-full overflow-auto">
-      <section className="mb-3">
-        <h1 className="font-bold text-3xl mb-2">Trang tổng quan</h1>
-        <Breadcrumb items={[{ title: 'Trang chủ' }, { title: 'Trang tổng quan' }]} />
-      </section>
+    <div className="p-6 bg-gray-50 min-h-screen">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-800">Trang tổng quan</h1>
+        <span className="text-gray-500">Trang chủ / Thống kê</span>
+      </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
-        <Card className="shadow-sm rounded-2xl">
-          <div className="flex items-start justify-between">
-            <Statistic title="Tổng doanh thu" value={k(revenue)} />
-            <div className="w-24">
-              <Sparkline values={revenueData.map((d) => d.revenue)} />
-            </div>
-          </div>
-          <div className="mt-2 text-sm text-gray-500">6 tháng gần nhất</div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+        <Card bordered={false} className="shadow-sm rounded-lg border-l-4 border-green-500">
+          <Statistic
+            title={
+              <span className="text-gray-600 font-bold text-xs uppercase">
+                Doanh thu Tháng {currentMonthDisplay}
+              </span>
+            }
+            value={stats.revenue}
+            formatter={(val) => formatVnd(val)}
+            prefix={<DollarSign size={20} className="text-green-600" />}
+            valueStyle={{ color: '#16a34a', fontWeight: 'bold' }}
+          />
+          <div className="mt-2 text-xs text-gray-400">Đã thanh toán</div>
         </Card>
 
-        <Card className="shadow-sm rounded-2xl">
-          <div className="flex items-start justify-between">
-            <Statistic title="Tăng trưởng trung bình" value={growth.toFixed(1)} suffix="%" />
-            <div className="w-24">
-              <Sparkline values={revenueData.map((d) => d.growth)} />
-            </div>
+        <Card bordered={false} className="shadow-sm rounded-lg border-l-4 border-orange-500">
+          <Statistic
+            title={
+              <span className="text-gray-600 font-bold text-xs uppercase">
+                Đơn hàng Tháng {currentMonthDisplay}
+              </span>
+            }
+            value={stats.totalOrders}
+            prefix={<ShoppingBag size={20} className="text-orange-500" />}
+            valueStyle={{ fontWeight: 'bold' }}
+          />
+          <div className="mt-3 flex gap-3 text-xs">
+            <span className="text-green-600 flex items-center gap-1 bg-green-50 px-1.5 rounded">
+              <CheckCircle size={10} /> {stats.successOrders}
+            </span>
+            <span className="text-red-500 flex items-center gap-1 bg-red-50 px-1.5 rounded">
+              <XCircle size={10} /> {stats.cancelledOrders}
+            </span>
           </div>
-          <div className="mt-2 text-sm text-gray-500">MoM</div>
         </Card>
 
-        <Card className="shadow-sm rounded-2xl">
-          <Statistic title="Tỷ lệ hoàn thành KPI" value={86} suffix="%" />
-          <div className="mt-4">
-            <Progress percent={86} showInfo={false} />
-          </div>
+        <Card bordered={false} className="shadow-sm rounded-lg">
+          <Statistic
+            title={<span className="text-gray-500 font-medium text-xs">Tăng trưởng TB</span>}
+            value={stats.growth}
+            precision={1}
+            suffix="%"
+            prefix={
+              <TrendingUp
+                size={20}
+                className={stats.growth >= 0 ? 'text-blue-500' : 'text-red-500'}
+              />
+            }
+            valueStyle={{ color: stats.growth >= 0 ? '#3b82f6' : '#ef4444' }}
+          />
+          <div className="mt-2 text-xs text-gray-400">So với tháng trước</div>
         </Card>
 
-        <Card className="shadow-sm rounded-2xl">
-          <Statistic title="Khách hàng mới" value={324} />
-          <div className="mt-2 text-sm text-gray-500">trong 30 ngày</div>
+        <Card bordered={false} className="shadow-sm rounded-lg">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-gray-500 font-medium text-xs">
+              KPI Tháng {currentMonthDisplay}
+            </span>
+            <span className="font-bold text-gray-700">{stats.kpiPercent}%</span>
+          </div>
+          <Progress
+            percent={stats.kpiPercent}
+            showInfo={false}
+            strokeColor="#3b82f6"
+            size="small"
+          />
+          <div className="mt-4 text-xs text-gray-500 flex justify-between items-center">
+            <span>Mục tiêu:</span>
+            <span className="font-bold text-blue-600">{formatVnd(stats.kpiTarget)}</span>
+          </div>
         </Card>
       </div>
 
-      {/* Content grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <Card className="shadow-sm rounded-2xl xl:col-span-2" title="Đơn hàng gần đây">
-          <Table
-            columns={columns}
-            dataSource={orders}
-            pagination={{ pageSize: 5 }}
-            className="rounded-xl"
-          />
-        </Card>
-
-        <div className="flex flex-col gap-4">
-          <Card className="shadow-sm rounded-2xl" title="Hoạt động gần đây">
-            <List
-              itemLayout="horizontal"
-              dataSource={activities}
-              renderItem={(item) => (
-                <List.Item>
-                  <List.Item.Meta
-                    avatar={<Avatar>{item.user[0]}</Avatar>}
-                    title={
-                      <div className="flex items-center justify-between">
-                        <span>
-                          <span className="font-medium">{item.user}</span>{' '}
-                          <span className="text-gray-500">{item.action}</span>
-                        </span>
-                        <span className="text-xs text-gray-400">{item.time}</span>
-                      </div>
-                    }
-                  />
-                </List.Item>
-              )}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <Card title="Đơn hàng mới nhất" bordered={false} className="shadow-sm rounded-lg h-full">
+            <Table
+              dataSource={stats.recentOrders}
+              columns={columns}
+              pagination={false}
+              rowKey="_id"
+              size="middle"
+              locale={{ emptyText: 'Chưa có đơn hàng nào' }}
             />
           </Card>
+        </div>
 
-          <Card className="shadow-sm rounded-2xl" title="Tiến độ dự án">
-            <div className="space-y-4">
-              <div>
-                <div className="flex items-center justify-between text-sm mb-1">
-                  <span>Website Revamp</span>
-                  <span className="text-gray-500">72%</span>
-                </div>
-                <Progress percent={72} showInfo={false} />
+        <div className="lg:col-span-1">
+          <Card
+            title={
+              <div className="flex items-center gap-2">
+                <Activity size={18} /> Hoạt động gần đây
               </div>
-              <div>
-                <div className="flex items-center justify-between text-sm mb-1">
-                  <span>Mobile App</span>
-                  <span className="text-gray-500">43%</span>
-                </div>
-                <Progress percent={43} showInfo={false} />
-              </div>
-              <div>
-                <div className="flex items-center justify-between text-sm mb-1">
-                  <span>Data Pipeline</span>
-                  <span className="text-gray-500">90%</span>
-                </div>
-                <Progress percent={90} showInfo={false} />
-              </div>
-            </div>
+            }
+            bordered={false}
+            className="shadow-sm rounded-lg h-full"
+          >
+            {activities.length === 0 ? (
+              <p className="text-gray-400 text-center py-4">Chưa có hoạt động nào</p>
+            ) : (
+              <List
+                itemLayout="horizontal"
+                dataSource={activities}
+                renderItem={(item) => (
+                  <List.Item className="!px-0 !py-3 border-b border-gray-50 last:border-0">
+                    <List.Item.Meta
+                      avatar={
+                        <Avatar
+                          style={{
+                            backgroundColor:
+                              item.status === 'paid' || item.status === 'completed'
+                                ? '#f6ffed'
+                                : '#fff7e6',
+                            color:
+                              item.status === 'paid' || item.status === 'completed'
+                                ? '#52c41a'
+                                : '#fa8c16',
+                            border: '1px solid #f0f0f0',
+                          }}
+                        >
+                          {item.avatar}
+                        </Avatar>
+                      }
+                      title={
+                        <span className="text-sm font-semibold text-gray-700">{item.user}</span>
+                      }
+                      description={
+                        <div className="flex flex-col">
+                          <span className="text-xs text-gray-500">
+                            đã mua đơn hàng{' '}
+                            <span className="font-medium text-gray-700">
+                              {formatVnd(item.amount)}
+                            </span>
+                          </span>
+                          <span className="text-[10px] text-gray-400 mt-0.5 flex items-center gap-1">
+                            <Clock size={10} /> {item.time}
+                          </span>
+                        </div>
+                      }
+                    />
+                  </List.Item>
+                )}
+              />
+            )}
           </Card>
         </div>
       </div>
     </div>
   )
 }
+
+export default Dashboard

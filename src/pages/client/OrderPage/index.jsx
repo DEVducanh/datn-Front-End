@@ -1,219 +1,252 @@
-import React, { useEffect, useState } from 'react'
-import { Table, Button, Space, Tag, Modal, message } from 'antd'
-import { EyeOutlined, CreditCardOutlined, DeleteOutlined } from '@ant-design/icons'
+import React, { useEffect, useState, useCallback } from 'react'
+import { Table, Button, Tag, Modal, message, Spin, Typography } from 'antd'
+import {
+  ClockCircleOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  SyncOutlined,
+  DollarOutlined,
+  DeleteOutlined,
+  CreditCardOutlined,
+  FileDoneOutlined
+} from '@ant-design/icons'
 import http from '@/apis/http'
 import PaymentModal from './paymentModal/index'
-import OrderDetailModal from './OrderDetailModal/index'
+
+const { Text } = Typography
+
+const BASE_ORDER_URL = '/orders'
+const ORDER_ITEM_DETAIL_URL = '/order-item/order'
+const BASE_ORDER_ITEM_URL = '/order-item'
+
+// --- CẤU HÌNH TRẠNG THÁI TIẾNG VIỆT ---
+const STATUS_CONFIG = {
+  Pending: { color: 'orange', icon: <ClockCircleOutlined />, text: 'Đang chờ xác nhận' },
+  Processing: { color: 'blue', icon: <SyncOutlined spin />, text: 'Đang nấu' },
+
+  // Gộp cả 2 cái này thành "Đã phục vụ" để khách dễ hiểu
+  Shipped: { color: 'green', icon: <CheckCircleOutlined />, text: 'Đã phục vụ' },
+  Served: { color: 'green', icon: <CheckCircleOutlined />, text: 'Đã phục vụ' },
+
+  Ready: { color: 'geekblue', icon: <CheckCircleOutlined />, text: 'Đã xong (Chờ bưng)' },
+  Cancelled: { color: 'red', icon: <CloseCircleOutlined />, text: 'Đã hủy' },
+  Paid: { color: 'magenta', icon: <CheckCircleOutlined />, text: 'Đã thanh toán' },
+  'Pending Payment': { color: 'purple', icon: <DollarOutlined />, text: 'Chờ thanh toán' },
+  Completed: { color: 'gold', icon: <CheckCircleOutlined />, text: 'Hoàn thành' }
+}
+
+const getItemStatusTag = (status) => {
+  const config = STATUS_CONFIG[status]
+  // Nếu gặp trạng thái lạ, hiện nguyên văn nhưng màu xám
+  if (!config) return <Tag>{status}</Tag>
+  return <Tag color={config.color} icon={config.icon}>{config.text}</Tag>
+}
 
 const OrderPage = () => {
+  const [items, setItems] = useState([])
   const [orders, setOrders] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [isUpdating, setIsUpdating] = useState(false)
   const [isPaymentModalVisible, setIsPaymentModalVisible] = useState(false)
-  const [isDetailModalVisible, setIsDetailModalVisible] = useState(false)
-  const [selectedOrder, setSelectedOrder] = useState(null)
-  const [currentUserId, setCurrentUserId] = useState(null)
+  const [currentTableId, setCurrentTableId] = useState(null)
 
   const [modalApi, modalContextHolder] = Modal.useModal()
   const [messageApi, contextHolder] = message.useMessage()
 
   useEffect(() => {
-    const userData = localStorage.getItem('user')
-    let userId = null
-    if (userData) {
-      try {
-        const user = JSON.parse(userData)
-        userId = user._id
-        setCurrentUserId(userId)
-      } catch (error) {
-        console.error('Lỗi parse user từ localStorage:', error)
-      }
-    }
     const tableId = localStorage.getItem('currentTableId')
-    if (userId && tableId) {
-      fetchOrders(userId, tableId)
+    if (tableId) {
+      setCurrentTableId(tableId)
+      fetchOrdersAndItems(tableId)
     }
   }, [])
 
-  const fetchOrders = async (userId, tableId) => {
+  const fetchOrderItemsByOrderId = async (orderId) => {
     try {
-      const res = await http.get(
-        `https://api-datn-orderfood-backend-2.onrender.com/orders/by-table/${tableId}?userId=${userId}`
-      )
-      const data = res.data
-      setOrders(data)
+      const response = await http.get(`${ORDER_ITEM_DETAIL_URL}/${orderId}`)
+      if (response.Orderitems) return response.Orderitems
+      if (response.data) return response.data
+      if (Array.isArray(response)) return response
+      return []
     } catch (error) {
-      console.error('Lỗi khi fetch orders:', error)
-      messageApi.error('Không thể tải danh sách đơn hàng.')
+      console.error(`[API] Lỗi lấy chi tiết đơn ${orderId}:`, error)
+      return []
     }
   }
 
-  // --- HÀM XỬ LÝ HỦY ĐƠN HÀNG (ĐÃ SỬA ĐỔI) ---
-  const handleCancelOrder = (orderId) => {
-    const tableId = localStorage.getItem('currentTableId')
+  const fetchOrdersAndItems = useCallback(async (tableId) => {
+    setLoading(true)
+    try {
+      const response = await http.get(BASE_ORDER_URL)
+
+      let fetchedOrders = []
+      if (Array.isArray(response)) fetchedOrders = response
+      else if (response.data && Array.isArray(response.data)) fetchedOrders = response.data
+      else if (response.data && Array.isArray(response.data.data)) fetchedOrders = response.data.data
+
+      // Lọc theo bàn
+      if (tableId) {
+        fetchedOrders = fetchedOrders.filter(order => {
+          const orderTableId = order.table_id?._id || order.table_id
+          return orderTableId === tableId
+        })
+      }
+
+      setOrders(fetchedOrders)
+
+      if (fetchedOrders.length === 0) {
+        setItems([])
+        setLoading(false)
+        return
+      }
+
+      const itemPromises = fetchedOrders.map(async (order) => {
+        const items = await fetchOrderItemsByOrderId(order._id)
+        const safeItems = Array.isArray(items) ? items : []
+        return safeItems.map((item) => ({
+          ...item,
+          orderId: order._id,
+          orderStatus: order.status,
+          key: item._id || Math.random(),
+        }))
+      })
+
+      const results = await Promise.all(itemPromises)
+      const allActiveItems = results.flat().filter(item => item.status !== 'Cancelled')
+      setItems(allActiveItems.reverse())
+
+    } catch (error) {
+      console.error('Lỗi tải đơn hàng:', error)
+      if (error.response?.status !== 404) {
+        messageApi.error('Không thể tải trạng thái món ăn.')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [messageApi])
+
+
+  const handlePaymentClick = () => {
+    // Logic: Cho phép thanh toán các món ĐÃ PHỤC VỤ (Shipped hoặc Served)
+    const hasServedItems = items.some(item =>
+      (item.status === 'Shipped' || item.status === 'Served') && item.orderStatus !== 'Paid'
+    )
+
+    if (!hasServedItems) {
+      messageApi.warning('Chưa có món nào ĐÃ PHỤC VỤ để thanh toán.')
+      return
+    }
+    setIsPaymentModalVisible(true)
+  }
+
+  const handleCancelItem = (record) => {
+    const { _id: itemId, status: currentStatus, dish_id } = record
+    const dishName = dish_id?.dish_name || 'món này'
+
+    // Chặn hủy nếu món đã làm xong hoặc đã ra bàn
+    if (['Shipped', 'Served', 'Cancelled', 'Paid', 'Completed'].includes(currentStatus)) {
+      messageApi.warning(`Món đã phục vụ hoặc hoàn thành, không thể hủy.`)
+      return
+    }
 
     modalApi.confirm({
-      title: 'Xác nhận hủy đơn hàng?',
-      content: 'Bạn có chắc chắn muốn hủy đơn hàng này không? Thao tác này không thể hoàn tác.',
-      okText: 'Hủy đơn',
+      title: 'Hủy món ăn?',
+      content: `Bạn muốn hủy **${dishName}**?`,
+      okText: 'Hủy ngay',
       okType: 'danger',
-      cancelText: 'Quay lại',
+      cancelText: 'Không',
       async onOk() {
-        if (!currentUserId || !tableId) {
-          messageApi.error('Lỗi: Không tìm thấy thông tin người dùng hoặc bàn.')
-          return;
-        }
-
+        setIsUpdating(true)
         try {
-          const BASE_URL = 'https://api-datn-orderfood-backend-2.onrender.com';
-
-          // GỌI API PATCH /orders/{id}/cancel
-          // Nếu API thành công (trả về 2xx), code sẽ tiếp tục chạy
-          await http.patch(`${BASE_URL}/orders/${orderId}/cancel`)
-
-          // ✅ LOGIC MỚI: CẬP NHẬT TRẠNG THÁI TỨC THỜI VÀ BÁO THÀNH CÔNG
-          // Đây là hành động được thực hiện ngay sau khi API trả về 2xx
-          messageApi.success(`Đơn hàng #${orderId.slice(-8)} đã được hủy thành công!`)
-
-          setOrders(prevOrders =>
-            prevOrders.map(order =>
-              order._id === orderId ? { ...order, status: 'Cancelled' } : order
-            )
-          );
-
+          await http.patch(`${BASE_ORDER_ITEM_URL}/${itemId}/status`, { status: 'Cancelled' })
+          setItems(prev => prev.filter(item => item._id !== itemId))
+          messageApi.success(`Đã hủy món ${dishName}`)
         } catch (error) {
-          // Lỗi chỉ xảy ra khi API trả về 4xx hoặc 5xx (tức là HỦY ĐƠN THỰC SỰ THẤT BẠI)
-          console.error('Lỗi API khi hủy đơn hàng:', error)
-          const status = error.response?.status
-          let errorMsg = error.response?.data?.message || 'Có lỗi xảy ra trong quá trình hủy đơn.'
-
-          // Xử lý trường hợp lỗi 404/400 cụ thể
-          if (status === 404) {
-            errorMsg = 'Lỗi 404: Không tìm thấy đơn hàng hoặc đơn hàng đã bị hủy trước đó.'
-          } else if (status === 400 && errorMsg.includes('status')) {
-            errorMsg = 'Đơn hàng này không thể hủy vì trạng thái hiện tại không phải Pending.'
-          }
-
-          messageApi.error(errorMsg)
+          messageApi.error('Lỗi khi hủy món.')
+        } finally {
+          setIsUpdating(false)
         }
       },
     })
   }
-  // ------------------------------------
-
-  const handleViewDetail = (record) => {
-    console.log('Đang xem chi tiết đơn hàng ID:', record._id)
-    setSelectedOrder(record)
-    setIsDetailModalVisible(true)
-  }
-
-  const handleCloseDetailModal = () => {
-    setIsDetailModalVisible(false)
-    setSelectedOrder(null)
-  }
-
-  const allCompletedOrCancelled = orders.every(
-    (order) => order.status === 'Completed' || order.status === 'Cancelled'
-  )
 
   const columns = [
+    { title: 'Mã ĐH', dataIndex: 'orderId', render: t => t?.slice(0, 8), width: 90 },
+    { title: 'Tên món', dataIndex: 'dish_id', render: d => d?.dish_name || '---' },
+    { title: 'Giá', dataIndex: 'price', render: p => `${Number(p).toLocaleString()}đ`, width: 110 },
+    { title: 'SL', dataIndex: 'quantity', width: 50, align: 'center' },
+    { title: 'Trạng thái', dataIndex: 'status', render: s => getItemStatusTag(s), width: 140 },
     {
-      title: 'STT',
-      key: 'index',
-      render: (_, __, index) => index + 1,
-      width: 60,
+      title: 'Thành tiền',
+      key: 'subtotal',
+      render: (_, r) => <Text>{(r.price * r.quantity).toLocaleString()}đ</Text>,
+      width: 110
     },
     {
-      title: 'Mã đơn hàng',
-      dataIndex: '_id',
-      key: '_id',
-      render: (text) => text.slice(0, 8),
-    },
-    {
-      title: 'Giá',
-      dataIndex: 'total_price',
-      key: 'total_price',
-      render: (price) => `${Number(price).toLocaleString('vi-VN')} VNĐ`,
-    },
-    {
-      title: 'Trạng thái',
-      dataIndex: 'status',
-      key: 'status',
-      render: (status) => {
-        let color = 'blue'
-        if (status === 'Completed') color = 'green'
-        if (status === 'Pending') color = 'orange'
-        if (status === 'Cancelled') color = 'red'
-        return <Tag color={color}>{status.toUpperCase()}</Tag>
-      },
-    },
-    {
-      title: 'Thời gian tạo',
-      dataIndex: 'createdAt',
-      key: 'createdAt',
-      render: (date) => new Date(date).toLocaleString('vi-VN'),
-    },
-    {
-      title: 'Hành động',
+      title: '',
       key: 'action',
-      render: (_, record) => (
-        <Space size="middle">
-          <Button type="default" icon={<EyeOutlined />} onClick={() => handleViewDetail(record)}>
-            Chi tiết
-          </Button>
-          {record.status === 'Pending' && (
-            <Button
-              type="primary"
-              danger
-              icon={<DeleteOutlined />}
-              onClick={() => handleCancelOrder(record._id)}
-            >
-              Hủy
-            </Button>
-          )}
-        </Space>
-      ),
+      render: (_, r) =>
+        // Ẩn nút hủy nếu món đã tiến hành làm
+        !['Shipped', 'Served', 'Cancelled', 'Paid', 'Processing', 'Completed'].includes(r.status) ? (
+          <Button danger icon={<DeleteOutlined />} size="small" onClick={() => handleCancelItem(r)} />
+        ) : null,
+      width: 60
     },
   ]
 
-  const handlePaymentClick = () => {
-    setIsPaymentModalVisible(true)
-  }
+  const totalBill = items.reduce((sum, item) => {
+    if (item.status === 'Cancelled') return sum
+    return sum + (item.price * item.quantity)
+  }, 0)
+
+  if (!currentTableId) return <div className="p-10 text-center text-red-500">Vui lòng quét mã QR.</div>
 
   return (
-    <div style={{ padding: '24px' }}>
+    <div style={{ padding: '24px', maxWidth: 1000, margin: '0 auto' }}>
       {contextHolder}
       {modalContextHolder}
-      <h2 className="font-semibold text-2xl p-1">Danh sách đơn hàng của bạn</h2>
-      <hr />
-      <Table columns={columns} dataSource={orders} rowKey="_id" />
-      {allCompletedOrCancelled && (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <Button
-            type="primary"
-            icon={<CreditCardOutlined />}
-            size="large"
-            style={{ padding: '0 30px', fontSize: '18px' }}
-            onClick={handlePaymentClick}
-          >
-            Thanh toán
-          </Button>
-        </div>
-      )}
-      {isPaymentModalVisible && (
-        <PaymentModal
-          orders={orders}
-          setOrders={setOrders}
-          visible={isPaymentModalVisible}
-          onClose={() => setIsPaymentModalVisible(false)}
+
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-2xl font-bold">Đơn hàng tại bàn</h2>
+        <Button icon={<SyncOutlined />} onClick={() => fetchOrdersAndItems(currentTableId)}>Tải lại</Button>
+      </div>
+
+      {loading ? (
+        <div className="text-center p-10"><Spin size="large" tip="Đang tải..." /></div>
+      ) : (
+        <Table
+          columns={columns}
+          dataSource={items}
+          rowKey="key"
+          pagination={false}
+          scroll={{ x: 600 }}
+          locale={{ emptyText: 'Bạn chưa gọi món nào' }}
         />
       )}
 
-      {isDetailModalVisible && selectedOrder && (
-        <OrderDetailModal
-          order={selectedOrder}
-          visible={isDetailModalVisible}
-          onClose={handleCloseDetailModal}
-        />
-      )}
+      <div className="mt-6 flex justify-between items-center bg-gray-50 p-4 rounded-lg">
+        <Text strong className="text-lg">Tạm tính:</Text>
+        <Text strong className="text-2xl text-orange-600">{totalBill.toLocaleString()} VNĐ</Text>
+      </div>
+
+      <div className="mt-6 text-center">
+        <Button
+          type="primary"
+          size="large"
+          icon={<FileDoneOutlined />}
+          onClick={handlePaymentClick}
+          disabled={items.length === 0}
+          className="bg-blue-600 hover:bg-blue-500 h-12 px-8 text-lg font-bold"
+        >
+          Thanh Toán (Món đã phục vụ)
+        </Button>
+      </div>
+
+      <PaymentModal
+        items={items}
+        visible={isPaymentModalVisible}
+        onClose={() => setIsPaymentModalVisible(false)}
+      />
     </div>
   )
 }
