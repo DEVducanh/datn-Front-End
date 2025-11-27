@@ -5,15 +5,10 @@ import { DownloadOutlined } from '@ant-design/icons'
 const { Text, Title } = Typography
 
 const AppQRCode = ({ tableId, tableName }) => {
-  // 1. Dùng IP từ terminal của bạn
-  // ‼️ SỬA LỖI: Bỏ dấu / ở cuối baseUrl ‼️
   const baseUrl = 'http://26.136.157.188:5173' // Bỏ dấu / ở đây
 
-  // 2. Tạo URL đầy đủ cho QR code
-  // ‼️ SỬA LỖI: Thêm dấu / ở đầu /flareon ‼️
   const qrCodeUrl = `${baseUrl}/flareon?table_id=${tableId}` // Thêm / ở đây
 
-  // === DÒNG DEBUG: In URL ra console ===
   console.log(`URL cho ${tableName}: ${qrCodeUrl}`)
   // ===================================
 
