@@ -1,46 +1,57 @@
 import React from 'react'
-import { QRCode, Typography, Tooltip } from 'antd'
+import { QRCode, Typography, Tooltip, Alert } from 'antd'
 import { DownloadOutlined } from '@ant-design/icons'
 
 const { Text, Title } = Typography
 
 const AppQRCode = ({ tableId, tableName }) => {
-  // 1. Dùng IP từ terminal của bạn
-  const baseUrl = ' http://26.45.230.226:5173'
+  const baseUrl = window.location.origin
 
-  // 2. Tạo URL đầy đủ cho QR code
-  // ‼️ SỬA LỖI: Thêm dấu / ở đầu /flareon ‼️
-  const qrCodeUrl = `${baseUrl}/flareon?table_id=${tableId}` // Thêm / ở đây
+  // 1. Kiểm tra xem có ID bàn không
+  if (!tableId) {
+    return <Alert type="error" message="Lỗi: Thiếu ID bàn" showIcon />
+  }
 
-  // === DÒNG DEBUG: In URL ra console ===
-  console.log(`URL cho ${tableName}: ${qrCodeUrl}`)
-  // ===================================
+  // 2. Tạo URL chuẩn
+  const qrCodeUrl = `${baseUrl}/flareon?table_id=${tableId}`
 
-  // 3. Hàm để tải QR code
   const downloadQRCode = () => {
     const canvas = document.getElementById(`qr-code-${tableId}`)?.querySelector('canvas')
     if (canvas) {
       const url = canvas.toDataURL('image/png')
-      a.href = url
-      a.download = `QR-Ban-${tableName}.png`
-      a.click()
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `QR-${tableName || 'Ban'}.png`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
     }
   }
 
   return (
     <div style={{ textAlign: 'center' }} id={`qr-code-${tableId}`}>
-      <QRCode value={qrCodeUrl} size={150} errorLevel="H" />
+      <QRCode
+        value={qrCodeUrl}
+        size={180}
+        errorLevel="M"
+        icon="/images/Logo.png"
+        iconSize={30}
+      />
 
-      <Title level={5} style={{ marginTop: 8, marginBottom: 0 }}>
-        {tableName}
+      <Title level={5} style={{ marginTop: 10, marginBottom: 0 }}>
+        {tableName || 'Bàn ???'}
       </Title>
-      <Text type="secondary" style={{ fontSize: 12 }}>
-        Quét QR Code để gọi món
-      </Text>
-      <br />
+
+      {/* HIỆN LINK RA ĐỂ BẠN KIỂM TRA LUÔN */}
+      <div style={{ marginBottom: 8, wordBreak: 'break-all' }}>
+        <Text type="secondary" style={{ fontSize: 10 }}>
+          {qrCodeUrl}
+        </Text>
+      </div>
+
       <Tooltip title="Tải xuống">
-        <a onClick={downloadQRCode} style={{ fontSize: 14, color: '#1890ff' }}>
-          <DownloadOutlined /> Tải xuống
+        <a onClick={downloadQRCode} style={{ fontSize: 14, color: '#fa8c16', fontWeight: 'bold', cursor: 'pointer' }}>
+          <DownloadOutlined /> Tải xuống QR
         </a>
       </Tooltip>
     </div>

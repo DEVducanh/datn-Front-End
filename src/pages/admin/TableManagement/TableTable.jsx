@@ -1,11 +1,10 @@
 import React, { useMemo } from 'react'
-import { Table, Popconfirm, Tag, Button, Tooltip } from 'antd' // Nhớ import Button, Tooltip
+import { Table, Popconfirm, Tag, Button, Tooltip } from 'antd'
 import { EditOutlined, DeleteOutlined, FileSearchOutlined } from '@ant-design/icons'
 import AntButton from '@/components/AntButton'
 import AppQRCode from '@/components/AppQRCode'
 import { STATUS_TABLE_MAP } from '@/shared/constants/table'
 
-// Nhận prop onViewOrder từ cha
 const TableTable = ({ data, loading, onEdit, onRemove, deletingId, onViewOrder }) => {
   const columns = useMemo(
     () => [
@@ -25,10 +24,19 @@ const TableTable = ({ data, loading, onEdit, onRemove, deletingId, onViewOrder }
       },
       {
         title: 'QR Code',
-        dataIndex: '_id',
+        dataIndex: '_id', // Antd sẽ tìm trường _id
         key: 'qrCode',
         align: 'center',
-        render: (_, record) => <AppQRCode tableId={record._id} tableName={record.table_name} />,
+        render: (_, record) => {
+          // --- KIỂM TRA DỮ LIỆU ---
+          // Nếu record._id bị undefined => QR sẽ bị lỗi
+          if (!record._id) {
+            console.error("LỖI: Bàn này thiếu _id:", record);
+            return <Tag color="red">Lỗi ID</Tag>;
+          }
+
+          return <AppQRCode tableId={record._id} tableName={record.table_name} />
+        },
       },
       {
         title: 'Thao tác',
@@ -38,13 +46,12 @@ const TableTable = ({ data, loading, onEdit, onRemove, deletingId, onViewOrder }
         render: (_, record) => (
           <div className="flex items-center justify-center gap-2">
             {/* NÚT XEM ĐƠN HÀNG */}
-            {/* Chỉ hiện khi bàn đã đặt hoặc đang dùng */}
             {(record.status === 'occupied' || record.status === 'reserved') && (
               <Tooltip title="Xem đơn hàng">
                 <Button
                   icon={<FileSearchOutlined />}
                   size="middle"
-                  onClick={() => onViewOrder(record)} // Gọi hàm từ cha
+                  onClick={() => onViewOrder(record)}
                 />
               </Tooltip>
             )}
@@ -68,8 +75,9 @@ const TableTable = ({ data, loading, onEdit, onRemove, deletingId, onViewOrder }
         ),
       },
     ],
-    [onEdit, onRemove, deletingId, onViewOrder] // Đừng quên dependency onViewOrder
+    [onEdit, onRemove, deletingId, onViewOrder]
   )
+
   return <Table rowKey="_id" loading={loading} columns={columns} dataSource={data} />
 }
 

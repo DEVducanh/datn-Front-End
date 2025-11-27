@@ -7,18 +7,25 @@ import CartItem from './CartItem'
 import { useMessage } from '@/contexts/MessageProvider'
 
 const CartPage = () => {
-  const mongoTableId = localStorage.getItem('currentTableId')
-  const userData = JSON.parse(localStorage.getItem('user') || '{}')
-  const userId = userData?._id
-
   const message = useMessage()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
+  // --- 1. LOGIC LẤY ID ---
+  const mongoTableId = localStorage.getItem('currentTableId')
+
+  const userString = localStorage.getItem('user') || localStorage.getItem('user_info')
+  const userData = userString ? JSON.parse(userString) : {}
+
+  // Lấy _id (User thường) hoặc id (Guest)
+  const userId = userData?._id || userData?.id
+
+  console.log("CartPage Check:", { mongoTableId, userId })
+
   const [isCheckingOut, setIsCheckingOut] = useState(false)
 
   // =====================================================
-  // GET CART DATA
+  // GET CART DATA (ĐÃ SỬA LỖI 404)
   // =====================================================
   const {
     data: cartData,
@@ -26,18 +33,20 @@ const CartPage = () => {
     isError,
     error,
   } = useQuery({
-    queryKey: ['cart', mongoTableId, userId],
+    queryKey: ['cart', mongoTableId], // Bỏ userId khỏi key vì không cần nữa
     queryFn: async () => {
-      const res = await http.get(`/cart/cart-item/${mongoTableId}/${userId}`)
+      // --- SỬA THEO ẢNH SWAGGER ---
+      // Đường dẫn chuẩn: /cart/cart-item/MÃ_BÀN
+      const res = await http.get(`/cart/cart-item/${mongoTableId}`)
       return res?.data
     },
-    enabled: !!mongoTableId && !!userId,
-    staleTime: 10000,
+    enabled: !!mongoTableId,
+    staleTime: 10000
   })
-
+  
   const items = cartData?.items || []
   const total = cartData?.total_price || 0
-
+ 
   // =====================================================
   // MUTATIONS
   // =====================================================
@@ -81,8 +90,8 @@ const CartPage = () => {
   // =====================================================
   const handleCheckout = async () => {
     if (isCheckingOut) return
-    if (!mongoTableId || !userId) {
-      message.error('Lỗi: Thiếu thông tin bàn hoặc người dùng.')
+    if (!mongoTableId) {
+      message.error('Lỗi: Thiếu thông tin bàn.')
       return
     }
     if (!items.length) {
@@ -93,8 +102,9 @@ const CartPage = () => {
     setIsCheckingOut(true)
 
     try {
+      // Gửi checkout (Backend tự lấy user_id từ token)
       await http.post('/cart/checkout', {
-        user_id: userId,
+        // user_id: userId, // Thử bỏ dòng này nếu BE bảo không cần
         table_id: mongoTableId,
       })
 
@@ -110,19 +120,17 @@ const CartPage = () => {
   // =====================================================
   // RENDER CONDITIONS
   // =====================================================
-  if (!mongoTableId || !userId)
-    return (
-      <p className="text-center mt-10 text-red-600">
-        Lỗi: Không tìm thấy thông tin bàn hoặc người dùng.
-      </p>
-    )
+  if (!mongoTableId)
+    return <p className="text-center mt-10 text-red-500">Vui lòng quét mã QR để chọn bàn.</p>
+
+  // (Tạm bỏ check userId chặt chẽ để tránh lỗi hiển thị nếu guest chưa sync kịp)
 
   if (isLoading) return <p className="text-center mt-10">Đang tải giỏ hàng...</p>
 
   if (isError)
     return (
       <p className="text-center mt-10 text-red-600">
-        Lỗi khi tải giỏ hàng: {error?.message || 'Unknown error'}
+        Lỗi tải giỏ hàng: {error?.message || 'Unknown error'}
       </p>
     )
 

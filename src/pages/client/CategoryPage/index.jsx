@@ -1,29 +1,26 @@
-import React, { useEffect, useMemo, useState } from 'react' // Thêm lại useMemo, useState
+import React, { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import http from '@/apis/http'
-import { Input, Spin } from 'antd' // Thêm lại Input, Spin
-import { Search } from 'lucide-react' // Thêm lại Search icon
+import { Input, Spin } from 'antd'
+import { Search } from 'lucide-react'
 import ProductGrid from '@/layouts/DefaultLayout/components/ProductGrid'
-import { useLocation, useNavigate, useParams } from 'react-router'
-import { useMessage } from '@/contexts/MessageProvider'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useMessage } from '@/contexts/MessageProvider' // <--- 1. Import lại hook message
 
 const HERO_IMAGE_URL =
   'https://images.unsplash.com/photo-1504674900247-0877df9cc836?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1280'
 
+// --- COMPONENT SIDEBAR ---
 const CategorySidebar = ({ selectedId, onSelectCategory }) => {
   const { data: categories = [], isLoading } = useQuery({
     queryKey: ['categories'],
     queryFn: async () => {
       const res = await http.get('/category')
-      if (res && Array.isArray(res.data)) {
-        return res.data
-      }
-      if (res && res.success && Array.isArray(res.data.data)) {
-        return res.data.data
-      }
+      if (res && Array.isArray(res.data)) return res.data
+      if (res && res.success && Array.isArray(res.data.data)) return res.data.data
       return []
     },
-    staleTime: 1000 * 60 * 5, // Cache 5 phút
+    staleTime: 1000 * 60 * 5,
   })
 
   const selectedStyle = 'bg-orange-100 text-orange-600 font-semibold'
@@ -31,37 +28,26 @@ const CategorySidebar = ({ selectedId, onSelectCategory }) => {
 
   return (
     <div className="bg-white p-4 rounded-lg shadow-sm sticky top-24">
-      {' '}
-      {/* Sticky để sidebar đứng yên khi cuộn */}
       <h3 className="text-xl font-bold mb-4 text-gray-800">Danh mục</h3>
       {isLoading ? (
-        <div className="flex justify-center p-4">
-          <Spin />
-        </div>
+        <div className="flex justify-center p-4"><Spin /></div>
       ) : (
         <ul className="space-y-2">
-          {/* Nút TẤT CẢ */}
           <li>
             <button
-              onClick={() => onSelectCategory(null)} // null = chọn tất cả
-              className={`w-full text-left px-3 py-2 rounded-md transition-colors ${
-                !selectedId ? selectedStyle : normalStyle
-              }`}
+              onClick={() => onSelectCategory(null)}
+              className={`w-full text-left px-3 py-2 rounded-md transition-colors ${!selectedId ? selectedStyle : normalStyle}`}
             >
               Tất cả món
             </button>
           </li>
-
-          {/* Lặp qua các danh mục từ API */}
           {categories.map((category) => (
             <li key={category._id}>
               <button
                 onClick={() => onSelectCategory(category._id)}
-                className={`w-full text-left px-3 py-2 rounded-md transition-colors ${
-                  selectedId === category._id ? selectedStyle : normalStyle
-                }`}
+                className={`w-full text-left px-3 py-2 rounded-md transition-colors ${selectedId === category._id ? selectedStyle : normalStyle}`}
               >
-                {category.category_name} {/* Giả sử tên là 'category_name' */}
+                {category.category_name}
               </button>
             </li>
           ))}
@@ -70,40 +56,36 @@ const CategorySidebar = ({ selectedId, onSelectCategory }) => {
     </div>
   )
 }
-// --- KẾT THÚC COMPONENT SIDEBAR ---
 
-// --- COMPONENT TRANG CATEGORY CHÍNH ---
+// --- COMPONENT CHÍNH ---
 const CategoryPage = () => {
   const { tableId: qrCode } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
   const queryClient = useQueryClient()
-  const message = useMessage()
-  const [selectedCategoryId, setSelectedCategoryId] = useState(null) // null = tất cả
-  const [searchText, setSearchText] = useState('') // State cho tìm kiếm
 
-  // --- useEffect (Giữ nguyên của bạn) ---
+  // 2. Sử dụng hook useMessage thay vì message tĩnh
+  const message = useMessage()
+
+  const [selectedCategoryId, setSelectedCategoryId] = useState(null)
+  const [searchText, setSearchText] = useState('')
+
+  // --- 1. Kiểm tra đăng nhập khi vào trang ---
   useEffect(() => {
     if (qrCode) {
-      const token = localStorage.getItem('token')
-      const userString = localStorage.getItem('user')
-      if (!token || !userString) {
-        console.log('Truy cập trang đặt món nhưng chưa đăng nhập, chuyển đến /login')
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+      if (!token) {
+        console.log('Chưa đăng nhập -> Chuyển hướng Login')
         navigate(`/flareon/login?redirect=${encodeURIComponent(location.pathname)}`)
       }
     }
-  }, [qrCode, navigate, location.pathname]) // Chạy khi qrCode hoặc URL thay đổi
+  }, [qrCode, navigate, location.pathname])
 
-  const {
-    data: products = [],
-    isLoading,
-    error,
-    isError,
-  } = useQuery({
+  // --- 2. Lấy danh sách món ăn ---
+  const { data: products = [], isLoading, isError, error } = useQuery({
     queryKey: ['dishes'],
     queryFn: async () => {
       const res = await http.get('/dishes')
-      console.log('API GET /dishes trả về:', res)
       if (res && Array.isArray(res.data)) {
         return res.data.map((dish) => ({
           id: dish._id,
@@ -119,158 +101,109 @@ const CategoryPage = () => {
     },
   })
 
+  // --- 3. Lọc sản phẩm ---
   const filteredProducts = useMemo(() => {
-    let productsToFilter = products
-
-    // 1. Lọc theo Danh mục
+    let result = products
     if (selectedCategoryId) {
-      productsToFilter = productsToFilter.filter(
-        (product) => product.categoryId === selectedCategoryId
-      )
+      result = result.filter((p) => p.categoryId === selectedCategoryId)
     }
-
-    // 2. Lọc theo Tìm kiếm (searchText)
     if (searchText) {
-      productsToFilter = productsToFilter.filter((product) =>
-        product.name.toLowerCase().includes(searchText.toLowerCase())
-      )
+      result = result.filter((p) => p.name.toLowerCase().includes(searchText.toLowerCase()))
     }
+    return result
+  }, [products, selectedCategoryId, searchText])
 
-    return productsToFilter
-  }, [products, selectedCategoryId, searchText]) // Tính lại khi 1 trong 3 thay đổi
-
-  // --- Mutation (Giữ nguyên của bạn) ---
+  // --- 4. API Thêm vào giỏ ---
   const addToCartMutation = useMutation({
-    mutationFn: (payload) => {
-      return http.post('/cart/add-item', payload)
-    },
-    onSuccess: (response, variables) => {
+    mutationFn: (payload) => http.post('/cart/add-item', payload),
+    onSuccess: (_, variables) => {
       message.success(`Đã thêm "${variables.dishName}" vào giỏ!`)
-      const { user_id: userId, table_id: tableId } = variables
-      if (tableId && userId) {
-        queryClient.invalidateQueries({ queryKey: ['cart', tableId, userId] })
+      const { user_id, table_id } = variables
+      if (table_id && user_id) {
+        queryClient.invalidateQueries({ queryKey: ['cart', table_id, user_id] })
       }
     },
-    onError: (err, variables) => {
-      message.error(`Lỗi khi thêm '${variables.dishName}' vào giỏ:`, err)
-      if (err.response?.status === 401) {
-        message.success('Vui lòng đăng nhập để thêm sản phẩm.')
-        navigate(
-          `/flareon/login?redirect=${encodeURIComponent(location.pathname + location.search)}`
-        )
+    onError: (err) => {
+      const status = err.response?.status
+      if (status === 401) {
+        message.warning('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.')
+        navigate(`/flareon/login?redirect=${encodeURIComponent(location.pathname + location.search)}`)
       } else {
-        const errMsg = err.response?.data?.message || 'Có lỗi xảy ra khi thêm vào giỏ.'
-        message.error(errMsg)
+        message.error(err.response?.data?.message || 'Lỗi thêm vào giỏ hàng')
       }
     },
   })
 
-  // --- HÀM XỬ LÝ THÊM VÀO GIỎ (Giữ nguyên của bạn) ---
+  // --- 5. Xử lý nút Thêm ---
   const handleAddToCart = (product) => {
-    console.log('handleAddToCart được gọi cho:', product.name)
-
-    // 1. Lấy user_id (Bắt buộc phải đăng nhập)
+    // A. Lấy User ID
     let userId = null
     try {
-      const userString = localStorage.getItem('user')
+      const userString = localStorage.getItem('user') || localStorage.getItem('user_info')
+
       if (!userString) {
-        message.warning('Bạn cần đăng nhập để thêm vào giỏ hàng.')
-        navigate(`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`)
-        return // Dừng hàm
+        message.warning('Bạn cần đăng nhập để gọi món.')
+        navigate(`/flareon/login?redirect=${encodeURIComponent(location.pathname + location.search)}`)
+        return
       }
       const userData = JSON.parse(userString)
-      userId = userData?._id // Lấy _id từ object user đã lưu
-      if (!userId) {
-        throw new Error('User ID không hợp lệ sau khi parse.')
-      }
+      userId = userData?._id
     } catch (e) {
-      message.error('Lỗi khi lấy thông tin người dùng. Vui lòng thử đăng nhập lại.')
+      console.error(e)
+    }
+
+    // B. Lấy Table ID
+    const tableIdToSend = localStorage.getItem('currentTableId') || qrCode
+
+    if (!tableIdToSend) {
+      message.warning('Vui lòng quét mã QR tại bàn trước.')
       return
     }
 
-    // 2. Lấy table_id từ localStorage
-    const tableIdToSend = localStorage.getItem('currentTableId')
-
-    // *** THÊM KIỂM TRA NẾU KHÔNG CÓ currentTableId ***
-    if (!tableIdToSend) {
-      message.warning('Vui lòng quét mã QR tại bàn để chọn bàn trước khi thêm món.')
-      console.log('Lỗi: Không tìm thấy currentTableId trong localStorage.')
-      return // Dừng lại nếu không có bàn
-    }
-
-    console.log('Sử dụng table_id từ localStorage:', tableIdToSend)
-
-    // 3. Tạo payload
-    const payload = {
+    // C. Gọi API
+    addToCartMutation.mutate({
       table_id: tableIdToSend,
       dish_id: product._id,
       quantity: 1,
       user_id: userId,
-    }
-
-    // 4. Gọi mutation
-    console.log('>>> Chuẩn bị gọi API VỚI:', JSON.stringify(payload, null, 2))
-    addToCartMutation.mutate({ ...payload, dishName: product.name })
+      dishName: product.name
+    })
   }
 
-  // --- XỬ LÝ TRẠNG THÁI LOADING/ERROR (Giữ nguyên của bạn) ---
-  if (isLoading) return <p>Đang tải sản phẩm...</p>
-  if (isError) return <p>Lỗi khi tải sản phẩm: {error?.message || 'Unknown error'}</p>
+  if (isLoading) return <div className="p-10 text-center"><Spin tip="Đang tải thực đơn..." /></div>
+  if (isError) return <div className="p-10 text-center text-red-500">Lỗi tải dữ liệu: {error.message}</div>
 
-  // --- RENDER GIAO DIỆN ---
-  // (Giữ nguyên kiểm tra đăng nhập của bạn)
-  const isLoggedIn = localStorage.getItem('token') && localStorage.getItem('user')
-  if (qrCode && !isLoggedIn) {
-    return <p className="text-center mt-10">Đang chuyển đến trang đăng nhập...</p>
-  }
-
-  // --- THAY THẾ TOÀN BỘ GIAO DIỆN RENDER (TỪ CODE CŨ) ---
   return (
     <div className="bg-gray-50 min-h-screen">
-      {/* === 1. HERO SECTION (TỪ CODE CŨ) === */}
+      {/* Hero Section */}
       <div className="relative h-64 bg-gray-800">
-        <img
-          src={HERO_IMAGE_URL}
-          alt="Thực đơn Flareon"
-          className="absolute inset-0 w-full h-full object-cover opacity-40"
-        />
+        <img src={HERO_IMAGE_URL} alt="Menu" className="absolute inset-0 w-full h-full object-cover opacity-40" />
         <div className="relative z-10 h-full flex flex-col justify-center items-center text-center px-4">
           <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
             {qrCode ? `Thực đơn (Bàn: ${qrCode})` : 'Khám phá Thực đơn'}
           </h1>
-          {/* Thanh tìm kiếm */}
           <Input
             size="large"
-            placeholder="Tìm kiếm món ăn (ví dụ: Gà rán...)"
+            placeholder="Tìm kiếm món ăn..."
             prefix={<Search className="text-gray-400" />}
             className="w-full max-w-lg !rounded-lg !py-3"
-            onChange={(e) => setSearchText(e.target.value)} // Cập nhật state tìm kiếm
+            onChange={(e) => setSearchText(e.target.value)}
           />
         </div>
       </div>
 
-      {/* === 2. BỐ CỤC CHÍNH (Sidebar + Grid) (TỪ CODE CŨ) === */}
+      {/* Main Content */}
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-8 py-8 px-4">
-        {/* CỘT 1: SIDEBAR DANH MỤC */}
         <aside className="w-full md:w-1/4 lg:w-1/5">
-          <CategorySidebar
-            selectedId={selectedCategoryId}
-            onSelectCategory={setSelectedCategoryId} // Truyền hàm set state xuống
-          />
+          <CategorySidebar selectedId={selectedCategoryId} onSelectCategory={setSelectedCategoryId} />
         </aside>
 
-        {/* CỘT 2: SẢN PHẨM */}
         <main className="w-full md:w-3/4 lg:w-4/5">
-          {/* Truyền 'filteredProducts' (sản phẩm đã lọc) xuống ProductGrid */}
-          <ProductGrid
-            products={filteredProducts} // Dùng danh sách đã lọc
-            onAddToCart={handleAddToCart} // Truyền hàm add (đã giữ nguyên của bạn)
-          />
-          {/* Hiển thị nếu lọc không có kết quả */}
+          <ProductGrid products={filteredProducts} onAddToCart={handleAddToCart} />
+
           {filteredProducts.length === 0 && (
             <div className="text-center text-gray-500 mt-10 p-10 bg-white rounded-lg shadow-sm">
-              <h3 className="text-xl font-semibold">Không tìm thấy sản phẩm</h3>
-              <p>Vui lòng thử lại với danh mục hoặc từ khóa tìm kiếm khác.</p>
+              <h3 className="text-xl font-semibold">Không tìm thấy món ăn nào</h3>
             </div>
           )}
         </main>

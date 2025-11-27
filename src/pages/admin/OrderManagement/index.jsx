@@ -2,7 +2,6 @@ import React, { useState } from 'react'
 import { Card, Table, Tag, Breadcrumb, Space, Button, Select, Input, message, Modal } from 'antd'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import http from '@/apis/http'
-import orderAPI from '@/apis/order/order.api'
 import axios from 'axios'
 import {
   DeleteOutlined,
@@ -16,33 +15,47 @@ import {
 import OrderModalEdit from './modalEdit'
 import OrderModalDetail from './orderDetail'
 
-// LOGIC API AN TOÀN: BỎ QUA INTERCEPTOR LỖI ĐỂ NHẬN PHẢN HỒI THÔ
+// --- BỘ TỪ ĐIỂN TRẠNG THÁI (ANH -> VIỆT) ---
+const STATUS_LABELS = {
+  Pending: 'Chờ xác nhận',
+  Processing: 'Đang nấu',
+  Shipped: 'Đã phục vụ', // Quy ước Shipped là Đã phục vụ
+  Completed: 'Hoàn thành',
+  Cancelled: 'Đã hủy',
+  Paid: 'Đã thanh toán'
+}
+
+const STATUS_COLORS = {
+  Pending: 'gold',
+  Processing: 'blue',
+  Shipped: 'cyan', // Màu xanh lơ cho Đã phục vụ
+  Completed: 'green',
+  Cancelled: 'red',
+  Paid: 'magenta'
+}
+
+// LOGIC API AN TOÀN
 const orderItemAPI = {
   getOrderItemDetails: async (orderId) => {
     try {
       const token = localStorage.getItem('token')
       const url = `${import.meta.env.VITE_API_URL || 'https://api-datn-orderfood-backend-2.onrender.com'}/order-item/order/${orderId}`
 
-      // GỌI AXIOS TRỰC TIẾP ĐỂ BỎ QUA INTERCEPTOR GÂY LỖI UNDEFINED
       const response = await axios.get(url, {
         headers: {
           'Content-Type': 'application/json',
           Authorization: token ? `Bearer ${token}` : '',
         },
       })
-
-      // Trả về response.data (chứa {message, Orderitems}) nguyên vẹn
       return response.data || {}
     } catch (error) {
       console.error('[API ERROR] Failed to fetch items:', error.response || error.message)
-      // Trả về đối tượng mặc định an toàn khi lỗi
       return { data: [] }
     }
   },
 }
 
 const { Option } = Select
-// const { confirm } = Modal // Đã xóa
 
 const OrderManagement = () => {
   const [statusSelected, setStatusSelected] = useState(null)
@@ -52,25 +65,17 @@ const OrderManagement = () => {
   const [searchText, setSearchtext] = useState('')
   const [messageApi, contextHolder] = message.useMessage()
 
-  // ⭐ SỬA LỖI CONFIRM: SỬ DỤNG HOOK useModal
   const [modalApi, modalContextHolder] = Modal.useModal()
-  const confirm = modalApi.confirm // Gán confirm từ hook
+  const confirm = modalApi.confirm
 
-  // State để lưu ID đơn hàng cần xem chi tiết
   const [detailOrderId, setDetailOrderId] = useState(null)
 
   const deleteSuccess = () => {
-    messageApi.open({
-      type: 'success',
-      content: 'Xóa đơn hàng thành công!',
-    })
+    messageApi.open({ type: 'success', content: 'Xóa đơn hàng thành công!' })
   }
 
   const deleteError = (errorMsg) => {
-    messageApi.open({
-      type: 'error',
-      content: errorMsg || 'Xóa đơn hàng thất bại!',
-    })
+    messageApi.open({ type: 'error', content: errorMsg || 'Xóa đơn hàng thất bại!' })
   }
 
   const queryClient = useQueryClient()
@@ -78,7 +83,6 @@ const OrderManagement = () => {
     queryKey: ['orders', statusSelected, searchText],
     queryFn: async () => {
       let url = '/orders'
-
       const params = []
       if (statusSelected) params.push(`status=${statusSelected}`)
       if (searchText) params.push(`search=${searchText}`)
@@ -93,14 +97,12 @@ const OrderManagement = () => {
     enabled: true,
   })
 
-  // GỌI API CHI TIẾT MÓN ĂN (Sẽ chạy khi detailOrderId thay đổi)
   const { data: orderItemData, isLoading: isLoadingItems } = useQuery({
     queryKey: ['orderItems', detailOrderId],
     queryFn: async () => {
       const res = await orderItemAPI.getOrderItemDetails(detailOrderId)
       return res
     },
-    // Chỉ chạy query này khi detailOrderId có giá trị
     enabled: !!detailOrderId,
     staleTime: 5 * 60 * 1000,
   })
@@ -130,12 +132,10 @@ const OrderManagement = () => {
     },
     onError: (error) => {
       console.error('❌ LỖI API DELETE Order:', error.response)
-
       let errorMessage = 'Xóa đơn hàng thất bại.'
       if (error.response) {
         const status = error.response.status
         const messageData = error.response.data?.message
-
         if (status === 401 || status === 403) {
           errorMessage = `Lỗi ${status} - Phân quyền: Bạn không có quyền xóa đơn hàng này.`
         } else if (status === 404) {
@@ -146,7 +146,6 @@ const OrderManagement = () => {
           errorMessage = `Lỗi Server: ${status}`
         }
       }
-
       deleteError(errorMessage)
     },
   })
@@ -171,7 +170,7 @@ const OrderManagement = () => {
 
   const handleOpenDetailModal = (order) => {
     setSelectedOrder(order)
-    setDetailOrderId(order._id) // SET ID ĐỂ KÍCH HOẠT FETCH
+    setDetailOrderId(order._id)
     setModalDetailOpen(true)
   }
 
@@ -179,7 +178,7 @@ const OrderManagement = () => {
     setModalOpen(false)
     setModalDetailOpen(false)
     setSelectedOrder(null)
-    setDetailOrderId(null) // RESET ID KHI ĐÓNG MODAL
+    setDetailOrderId(null)
   }
 
   const columns = [
@@ -204,18 +203,14 @@ const OrderManagement = () => {
       dataIndex: 'status',
       key: 'status',
       render: (status) => {
-        const colorMap = {
-          Pending: 'gold',
-          Processing: 'blue',
-          Completed: 'green',
-          Cancelled: 'red',
-          Shipped: 'purple',
-        }
-        return <Tag color={colorMap[status] || 'default'}>{status}</Tag>
+        // ⭐ SỬA: Hiển thị tiếng Việt và màu tương ứng
+        const label = STATUS_LABELS[status] || status
+        const color = STATUS_COLORS[status] || 'default'
+        return <Tag color={color}>{label}</Tag>
       },
     },
     {
-      title: 'Action',
+      title: 'Hành động',
       key: 'action',
       render: (_, record) => {
         const isFinalized = record.status === 'Cancelled' || record.status === 'Completed'
@@ -233,10 +228,7 @@ const OrderManagement = () => {
                   okText: 'Xóa',
                   okType: 'danger',
                   cancelText: 'Hủy',
-                  // ⭐ SỬA LỖI: CHUYỂN onOk THÀNH HÀM ASYNC VÀ RETURN PROMISE
                   onOk: async () => {
-                    console.log(`[DELETE CHECK] CHẮC CHẮN GỌI DELETE cho ID: ${record._id}`)
-                    // Trả về Promise để Modal chờ
                     return deleteOrder(record._id)
                   },
                 })
@@ -267,25 +259,24 @@ const OrderManagement = () => {
 
   const tableData = Array.isArray(data) ? data : data?.data || []
 
-  // LOGIC LẤY MẢNG MÓN ĂN TỪ CÁC TRƯỜNG KHÁC NHAU
   const orderItems =
     orderItemData && Array.isArray(orderItemData.data)
       ? orderItemData.data
       : orderItemData?.Orderitems && Array.isArray(orderItemData.Orderitems)
         ? orderItemData.Orderitems
         : orderItemData && Array.isArray(orderItemData)
-          ? orderItemData // Trường hợp Backend trả về mảng thô
+          ? orderItemData
           : []
 
   return (
     <div className="h-full overflow-auto">
       {contextHolder}
-      {modalContextHolder} {/* ⭐ THÊM MODAL CONTEXT HOLDER */}
+      {modalContextHolder}
       <section className="mb-3">
         <h1 className="font-bold text-3xl mb-2">Quản lý đơn hàng</h1>
         <Breadcrumb items={[{ title: 'Trang chủ' }, { title: 'Quản lý đơn hàng' }]} />
       </section>
-      <Card className="shadow-sm rounded-2xl xl:col-span-2" title="Đơn hàng gần đây">
+      <Card className="shadow-sm rounded-2xl xl:col-span-2" title="Danh sách đơn hàng">
         <div className="mb-4 flex justify-between">
           <div
             style={{
@@ -299,26 +290,27 @@ const OrderManagement = () => {
           >
             <Space>
               <Input.Search
-                placeholder="Tìm kiếm theo bàn hoặc khách hàng..."
+                placeholder="Tìm kiếm theo bàn hoặc khách..."
                 prefix={<SearchOutlined />}
                 style={{ width: 260 }}
                 onSearch={handleSearch}
               />
             </Space>
             <Space>
+              {/* ⭐ SỬA: Dropdown lọc cũng hiển thị tiếng Việt */}
               <Select
                 placeholder="Lọc theo trạng thái"
                 allowClear
-                style={{ width: 150 }}
+                style={{ width: 180 }}
                 suffixIcon={<FilterOutlined />}
                 value={statusSelected}
                 onChange={handleChange}
               >
-                <Option value="Pending">Pending</Option>
-                <Option value="Processing">Processing</Option>
-                <Option value="Shipped">Shipped</Option>
-                <Option value="Completed">Completed</Option>
-                <Option value="Cancelled">Cancelled</Option>
+                <Option value="Pending">Chờ xác nhận</Option>
+                <Option value="Processing">Đang nấu</Option>
+                <Option value="Shipped">Đã phục vụ</Option>
+                <Option value="Completed">Hoàn thành</Option>
+                <Option value="Cancelled">Đã hủy</Option>
               </Select>
             </Space>
           </div>
@@ -334,14 +326,16 @@ const OrderManagement = () => {
           className="rounded-xl"
         />
       </Card>
+
       <OrderModalDetail
         order={selectedOrder}
         open={modalDetailOpen}
         onCancel={() => handleCancel()}
-        // TRUYỀN DỮ LIỆU ĐÃ FETCH VÀO PROP MỚI
         orderItemsData={orderItems}
         isLoadingItems={isLoadingItems}
       />
+
+      {/* Lưu ý: Modal Edit cũng cần phải sửa file modalEdit.jsx thì dropdown bên trong mới hiện tiếng Việt */}
       <OrderModalEdit
         open={modalOpen}
         order={selectedOrder}

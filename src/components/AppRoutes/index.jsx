@@ -16,6 +16,7 @@ import OrderPage from '@/pages/client/OrderPage'
 
 import Login from '@/pages/client/Login'
 import Register from '@/pages/client/Register'
+import GuestLogin from '@/pages/client/GuestLogin' // <--- 1. Import trang GuestLogin
 
 // Admin pages
 import CategoryManagement from '@/pages/admin/CategoryManagement'
@@ -41,9 +42,15 @@ const AppRoutes = () => {
   return (
     <>
       <Routes>
-        {/* Admin layout pages */}
+        {/* Redirect root to /flareon */}
         <Route path="/" element={<Navigate to="/flareon" replace />} />
 
+        {/* --- 2. Route cho trang đăng nhập khách hàng (Quét QR) --- */}
+        {/* Đặt ở ngoài DefaultLayout để nó hiển thị full màn hình */}
+        <Route path="/guest-login" element={<GuestLogin />} />
+
+
+        {/* Admin Routes */}
         <Route element={<AdminRoute />}>
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<Dashboard />} />
@@ -58,6 +65,7 @@ const AppRoutes = () => {
           </Route>
         </Route>
 
+        {/* Role-based Routes */}
         <Route element={<PrivateRoute allowedRoles={[USER_ROLE.CHEF, USER_ROLE.ADMIN]} />}>
           <Route path="/chef" element={<ChefOrderPage />} />
         </Route>
@@ -70,6 +78,7 @@ const AppRoutes = () => {
           <Route path="/cashier" element={<CashierPage />} />
         </Route>
 
+        {/* Client Routes (Default Layout) */}
         <Route path="/flareon" element={<DefaultLayout />}>
           <Route index element={<Home />} />
           <Route path="about" element={<AboutPage />} />
@@ -90,6 +99,7 @@ const AppRoutes = () => {
           </Route>
         </Route>
       </Routes>
+
       <ToastContainer
         position="top-right"
         autoClose={3000}

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react'
-import { Modal, Button, Typography, Divider, message } from 'antd'
+import { Modal, Button, Typography, message } from 'antd'
 import { Wallet, QrCode, Store, Check, ChevronRight, Receipt } from 'lucide-react'
 import { useMutation } from '@tanstack/react-query'
 import http from '@/apis/http'
@@ -7,114 +7,86 @@ import { useNavigate } from 'react-router-dom'
 
 const { Text } = Typography
 
-const PaymentModal = ({ visible, onClose, orders = [] }) => {
-  // Thêm default value cho orders
+const PaymentModal = ({ visible, onClose, items = [] }) => {
   const navigate = useNavigate()
   const [paymentMethod, setPaymentMethod] = useState('Cash')
 
-  // --- SỬA: Dùng useMemo để tính toán chính xác ---
-  const { totalAmount, orderIds } = useMemo(() => {
-    // Lọc các đơn HỢP LỆ để thanh toán
-    // (Bao gồm cả đơn 'Completed' chưa trả tiền và đơn 'Pending Payment' đang chờ)
-    const validOrders = orders.filter(
-      (order) => order.status === 'Completed' || order.status === 'Pending Payment'
-    )
+  const { totalAmount, orderIdsToPay } = useMemo(() => {
+    // Lọc món 'Shipped' hoặc 'Served' (Cả 2 đều hiểu là Đã phục vụ)
+    const servedItems = items.filter(item =>
+      (item.status === 'Shipped' || item.status === 'Served') && item.orderStatus !== 'Paid'
+    );
 
-    const total = validOrders.reduce((sum, order) => sum + (order.total_price || 0), 0)
-    const ids = validOrders.map((o) => o._id)
+    const total = servedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const uniqueOrderIds = [...new Set(servedItems.map(item => item.orderId))];
 
-    return { totalAmount: total, orderIds: ids }
-  }, [orders])
+    return { totalAmount: total, orderIdsToPay: uniqueOrderIds }
+  }, [items])
 
-  // --- API VNPAY ---
-  const createVnPayMutation = useMutation({
-    mutationFn: (data) => http.post('/invoices', data),
+  const createInvoiceMutation = useMutation({
+    mutationFn: (payload) => http.post('/invoices', payload),
     onSuccess: (res) => {
-      if (res.paymentUrl) {
-        window.location.href = res.paymentUrl
+      const paymentUrl = res.data?.paymentUrl || res.paymentUrl || res.data?.url || res.url;
+      if (paymentMethod === 'VnPay' && paymentUrl) {
+        window.location.href = paymentUrl
       } else {
-        message.error('Không lấy được link thanh toán VNPay (Backend không trả về URL)')
+        onClose()
+        Modal.success({
+          title: null,
+          width: 450,
+          centered: true,
+          content: (
+            <div className="flex flex-col items-center py-6">
+              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                <Store className="w-10 h-10 text-green-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-800 mb-2">Yêu cầu thành công!</h3>
+              <p className="text-center text-gray-500 mb-6 px-4">
+                Vui lòng đến <strong>Quầy thu ngân</strong> để thanh toán tiền mặt.
+              </p>
+            </div>
+          ),
+          okText: 'Xong',
+          onOk: () => navigate(0),
+        })
       }
     },
     onError: (error) => {
-      const msg = error.response?.data?.message || 'Lỗi tạo thanh toán VNPay.'
-      message.error(msg)
-    },
-  })
-
-  // --- API TIỀN MẶT ---
-  const requestCashPaymentMutation = useMutation({
-    mutationFn: async () => {
-      const promises = orderIds.map((id) =>
-        http.patch(`/orders/${id}/status`, { status: 'Pending Payment' })
-      )
-      return Promise.all(promises)
-    },
-    onSuccess: () => {
-      onClose()
-      Modal.success({
-        title: null,
-        icon: null,
-        width: 450,
-        centered: true,
-        content: (
-          <div className="flex flex-col items-center py-6">
-            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-4">
-              <Store className="w-10 h-10 text-green-600" />
-            </div>
-            <h3 className="text-xl font-bold text-gray-800 mb-2">Yêu cầu đã được gửi!</h3>
-            <p className="text-center text-gray-500 mb-6 px-4">
-              Vui lòng di chuyển đến <strong>Quầy thu ngân</strong> để hoàn tất thanh toán.
-            </p>
-          </div>
-        ),
-        okText: 'Hoàn tất',
-        onOk: () => navigate(0),
-      })
-    },
-    onError: () => {
-      message.error('Không thể gửi yêu cầu thanh toán.')
+      const msg = error.response?.data?.message || 'Lỗi tạo hóa đơn.';
+      message.error(`Lỗi: ${msg}`);
     },
   })
 
   const handlePayment = () => {
-    console.log('Bấm thanh toán. Order IDs:', orderIds) // Debug log
-
-    if (orderIds.length === 0) {
-      message.warning(
-        'Không có đơn hàng nào hợp lệ để thanh toán (Đơn phải là Completed hoặc Pending Payment)'
-      )
+    if (orderIdsToPay.length === 0) {
+      message.warning('Không có món nào ĐÃ PHỤC VỤ để thanh toán.')
       return
     }
 
-    if (paymentMethod === 'VnPay') {
-      const payload = {
-        order_id: orderIds, // Gửi mảng ID
-        payment_method: 'VnPay',
-        amount: totalAmount,
-        language: 'vn',
-        bankCode: '',
-      }
-      console.log('Gửi payload VNPay:', payload) // Debug log
-      createVnPayMutation.mutate(payload)
-    } else {
-      requestCashPaymentMutation.mutate()
+    let methodString = 'Cash';
+    if (paymentMethod === 'VnPay') methodString = 'VNPAY';
+
+    const payload = {
+      order_ids: orderIdsToPay,
+      method: methodString,
+      amount: totalAmount
     }
+
+    createInvoiceMutation.mutate(payload)
   }
 
-  // Danh sách phương thức (Giữ nguyên UI đẹp của bạn)
   const paymentOptions = [
     {
       key: 'Cash',
       title: 'Tiền mặt',
-      description: 'Thanh toán trực tiếp tại quầy',
+      description: 'Thanh toán tại quầy thu ngân',
       icon: <Wallet className="w-6 h-6 text-orange-600" />,
       activeColor: 'border-orange-500 bg-orange-50',
     },
     {
       key: 'VnPay',
       title: 'VNPay / QR Code',
-      description: 'Quét mã - Thanh toán ngay',
+      description: 'Quét mã QR để thanh toán online',
       icon: <QrCode className="w-6 h-6 text-blue-600" />,
       activeColor: 'border-blue-500 bg-blue-50',
     },
@@ -122,93 +94,58 @@ const PaymentModal = ({ visible, onClose, orders = [] }) => {
 
   return (
     <Modal
-      title={
-        <div className="flex items-center gap-2 pt-2 px-2">
-          <Receipt className="w-5 h-5 text-gray-700" />
-          <span className="text-lg font-bold text-gray-800">Thanh toán đơn hàng</span>
-        </div>
-      }
+      title={<span className="text-lg font-bold">Thanh toán (Món đã phục vụ)</span>}
       open={visible}
       onCancel={onClose}
       footer={null}
       centered
       width={500}
-      className="rounded-2xl overflow-hidden pb-0"
+      className="rounded-2xl"
     >
       <div className="px-2 pb-4">
-        {/* Tổng tiền */}
-        <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-6 text-center my-6 border border-gray-200">
+        <div className="bg-green-50 rounded-xl p-6 text-center my-6 border border-green-200">
           <Text type="secondary" className="text-sm uppercase tracking-wide font-medium">
-            Tổng thanh toán
+            Tổng tiền cần trả
           </Text>
-          <div className="text-4xl font-extrabold text-orange-600 mt-2 tracking-tight">
+          <div className="text-4xl font-extrabold text-green-700 mt-2 tracking-tight">
             {totalAmount.toLocaleString('vi-VN')} <span className="text-2xl align-top">đ</span>
+          </div>
+          <div className="text-xs text-gray-500 mt-2">
+            (Chỉ tính các món đã mang ra bàn)
           </div>
         </div>
 
-        <div className="mb-4">
-          <span className="text-sm font-semibold text-gray-500 uppercase tracking-wider ml-1">
-            Chọn phương thức
-          </span>
-        </div>
-
-        {/* Danh sách phương thức */}
         <div className="flex flex-col gap-3">
           {paymentOptions.map((option) => (
             <div
               key={option.key}
               onClick={() => setPaymentMethod(option.key)}
-              className={`relative flex items-center p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ease-in-out group
-                ${
-                  paymentMethod === option.key
-                    ? option.activeColor
-                    : 'border-gray-100 hover:border-gray-300 hover:bg-gray-50'
-                }`}
+              className={`relative flex items-center p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 group
+                ${paymentMethod === option.key ? option.activeColor : 'border-gray-100 hover:bg-gray-50'}`}
             >
-              <div
-                className={`w-12 h-12 rounded-full flex items-center justify-center bg-white shadow-sm mr-4 
-                  ${paymentMethod === option.key ? 'opacity-100' : 'opacity-70 group-hover:opacity-100'}`}
-              >
-                {option.icon}
-              </div>
-
+              <div className="mr-4">{option.icon}</div>
               <div className="flex-1">
-                <h4
-                  className={`font-bold text-base ${paymentMethod === option.key ? 'text-gray-900' : 'text-gray-700'}`}
-                >
-                  {option.title}
-                </h4>
+                <h4 className="font-bold">{option.title}</h4>
                 <p className="text-sm text-gray-500 m-0">{option.description}</p>
               </div>
-
-              {paymentMethod === option.key && (
-                <div className="absolute top-1/2 right-4 transform -translate-y-1/2">
-                  <div className="bg-orange-500 rounded-full p-1 shadow-sm">
-                    <Check className="w-3 h-3 text-white" strokeWidth={3} />
-                  </div>
-                </div>
-              )}
+              {paymentMethod === option.key && <Check className="w-5 h-5 text-orange-500" />}
             </div>
           ))}
         </div>
 
-        {/* Nút thanh toán */}
         <Button
           type="primary"
           size="large"
-          className="mt-8 w-full h-12 text-lg font-bold rounded-xl bg-orange-600 hover:!bg-orange-700 shadow-lg shadow-orange-200 border-none flex items-center justify-center gap-2"
+          className="mt-8 w-full h-12 text-lg font-bold rounded-xl bg-blue-600 hover:!bg-blue-700 border-none"
           onClick={handlePayment}
-          loading={createVnPayMutation.isPending || requestCashPaymentMutation.isPending}
-          // Đừng bao giờ disable nút này nếu totalAmount > 0, hãy để handlePayment báo lỗi nếu cần
+          loading={createInvoiceMutation.isPending}
+          disabled={totalAmount === 0}
         >
-          {paymentMethod === 'VnPay' ? 'Thanh toán ngay' : 'Gửi yêu cầu'}
-          {!createVnPayMutation.isPending && !requestCashPaymentMutation.isPending && (
-            <ChevronRight className="w-5 h-5" />
-          )}
+          Xác nhận thanh toán
         </Button>
       </div>
     </Modal>
   )
 }
 
-export default PaymentModal
+export default PaymentModal 
