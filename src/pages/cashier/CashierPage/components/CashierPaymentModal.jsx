@@ -12,55 +12,61 @@ const CashierPaymentModal = ({ isOpen, onClose, order }) => {
   // --- 3. BƯỚC CUỐI: Cập nhật đơn hàng thành PAID ---
   const updateToPaidMutation = useMutation({
     mutationFn: async () => {
-      // Gọi API cập nhật trạng thái đơn hàng thành 'Paid' (hoặc 'Completed' tùy backend bạn)
-      // Thông thường sau khi thu tiền xong, đơn hàng nên là 'Paid' hoặc 'Served' và ẩn đi
+      // Gọi API cập nhật trạng thái đơn hàng thành 'Paid'
+      console.log('Đang cập nhật trạng thái sang Paid...')
       await http.patch(`/orders/${order._id}/status`, { status: 'Paid' })
     },
     onSuccess: () => {
       message.success('Thanh toán thành công! Đơn hàng đã hoàn tất.')
-      queryClient.invalidateQueries(['cashier-orders']) // Làm mới danh sách
+      queryClient.invalidateQueries(['cashier-orders']) // Làm mới danh sách ngay lập tức
+      queryClient.invalidateQueries(['orders']) // Refresh thêm key này cho chắc
       onClose()
     },
-    onError: () => {
-      // Dù lỗi bước này thì tiền cũng đã thu rồi, chỉ là status chưa cập nhật
-      message.warning('Đã thu tiền nhưng cập nhật trạng thái thất bại. Vui lòng tải lại trang.')
-      onClose()
+    onError: (error) => {
+      console.error('Lỗi update Paid:', error)
+      message.warning('Đã thu tiền nhưng chưa cập nhật được trạng thái. Vui lòng thử lại.')
     },
   })
 
   // --- 2. BƯỚC GIỮA: Tạo hóa đơn ---
   const createInvoiceMutation = useMutation({
     mutationFn: (payload) => http.post('/invoices', payload),
-    onSuccess: () => {
+    onSuccess: (res) => {
+      console.log('Tạo hóa đơn thành công, chuẩn bị update Paid...')
       // Sau khi tạo hóa đơn thành công -> Cập nhật trạng thái Order thành Paid
       updateToPaidMutation.mutate()
     },
     onError: (err) => {
+      console.error('Lỗi tạo hóa đơn:', err)
       const msg = err.response?.data?.message || 'Lỗi tạo hóa đơn.'
       message.error(msg)
     },
   })
 
-  // --- 1. BƯỚC ĐẦU: Chuẩn bị trạng thái 'Completed' ---
+  // --- 1. BƯỚC ĐẦU: Logic xử lý ---
   const handleConfirmPayment = async () => {
     if (!order) return
 
     try {
-      // Bước 1: Nếu đơn chưa phải Completed, ép nó về Completed trước
-      // (Vì backend của bạn yêu cầu đơn phải Completed mới cho tạo hóa đơn)
+      // Bước 1: Ép trạng thái về Completed (Yêu cầu của Backend để tạo được Invoice)
+      // Chỉ gọi nếu trạng thái chưa phải là Completed
       if (order.status !== 'Completed') {
+        console.log('Chuyển trạng thái sang Completed trước...')
         await http.patch(`/orders/${order._id}/status`, { status: 'Completed' })
       }
 
-      // Bước 2: Gọi tạo hóa đơn
+      // Bước 2: Tạo Payload CHUẨN (Quan trọng nhất)
       const payload = {
-        order_id: [order._id],
-        payment_method: 'Cash',
+        order_id: order._id, // <-- SỬA LỖI 1: Truyền String, KHÔNG dùng mảng [order._id]
+        method: 'Cash', // <-- SỬA LỖI 2: Dùng key 'method' cho giống bên Client
         amount: order.total_price,
       }
+
+      console.log('Gửi yêu cầu tạo hóa đơn:', payload)
       createInvoiceMutation.mutate(payload)
     } catch (error) {
-      message.error('Lỗi: Không thể cập nhật trạng thái đơn hàng.')
+      console.error('Lỗi quy trình:', error)
+      message.error('Lỗi hệ thống: Không thể cập nhật trạng thái đơn hàng.')
     }
   }
 
