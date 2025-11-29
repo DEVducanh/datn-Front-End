@@ -11,23 +11,20 @@ const PaymentModal = ({ visible, onClose, items = [] }) => {
   const [paymentMethod, setPaymentMethod] = useState('Cash')
   const [isProcessing, setIsProcessing] = useState(false)
 
-  // 1. TÍNH TOÁN & LẤY ID ĐƠN HÀNG
+  // TÍNH GIÁ & LẤY ID ĐƠN
   const { totalAmount, singleOrderId, orderIdsToPay } = useMemo(() => {
-    // Lấy các món chưa thanh toán và chưa hủy
     const payableItems = items.filter(
       (item) => item.orderStatus !== 'Paid' && item.status !== 'Cancelled'
     )
 
     const total = payableItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-
-    // Lấy danh sách ID (đề phòng trường hợp gộp bàn, nhưng thường chỉ có 1 ID)
     const uniqueOrderIds = [...new Set(payableItems.map((item) => item.orderId))]
     const id = uniqueOrderIds.length > 0 ? uniqueOrderIds[0] : null
 
     return { totalAmount: total, singleOrderId: id, orderIdsToPay: uniqueOrderIds }
   }, [items])
 
-  // 2. HÀM XỬ LÝ THANH TOÁN (GỘP LOGIC CỦA CẢ 2 BẠN)
+  // XỬ LÝ THANH TOÁN
   const handlePayment = async () => {
     if (!singleOrderId) {
       message.warning('Không tìm thấy đơn hàng hợp lệ.')
@@ -42,13 +39,8 @@ const PaymentModal = ({ visible, onClose, items = [] }) => {
     setIsProcessing(true)
 
     try {
-      // =========================================================
-      // TRƯỜNG HỢP 1: TIỀN MẶT (LOGIC CỦA BẠN)
-      // =========================================================
+      // ======= TIỀN MẶT =======
       if (paymentMethod === 'Cash') {
-        console.log('Quy trình Tiền mặt: Update status -> Pending Payment')
-
-        // Chỉ update status thành 'Pending Payment' để báo thu ngân
         await http.patch(`/orders/${singleOrderId}/status`, { status: 'Pending Payment' })
 
         setIsProcessing(false)
@@ -70,18 +62,14 @@ const PaymentModal = ({ visible, onClose, items = [] }) => {
             </div>
           ),
           okText: 'Đã hiểu',
-          onOk: () => navigate(0), // Reload trang
+          onOk: () => navigate(0),
         })
-        return // Kết thúc tại đây
+        return
       }
 
-      // =========================================================
-      // TRƯỜNG HỢP 2: VNPAY (LOGIC CỦA BẠN BẠN)
-      // =========================================================
+      // ======= VNPAY =======
       if (paymentMethod === 'VnPay') {
-        console.log('Quy trình VNPay: Completed -> Invoice -> Payment Link')
-
-        // B1: Ép trạng thái sang 'Completed'
+        // Cập nhật Completed
         try {
           const updatePromises = orderIdsToPay.map((id) =>
             http.patch(`/orders/${id}/status`, { status: 'Completed' })
@@ -91,12 +79,13 @@ const PaymentModal = ({ visible, onClose, items = [] }) => {
           console.warn('Lỗi update status:', err)
         }
 
-        // B2: Tạo hóa đơn
+        // Tạo hóa đơn
         const invoicePayload = {
           order_id: singleOrderId,
           method: 'VnPay',
           amount: totalAmount,
         }
+
         const invoiceRes = await http.post('/invoices', invoicePayload)
 
         const invoiceId =
@@ -104,9 +93,10 @@ const PaymentModal = ({ visible, onClose, items = [] }) => {
           invoiceRes.data?._id ||
           invoiceRes.invoice?._id ||
           invoiceRes._id
+
         if (!invoiceId) throw new Error('Không lấy được ID hóa đơn từ Server')
 
-        // B3: Lấy link VNPay
+        // Lấy link VNPay
         const paymentRes = await http.post('/payment/create-payment', {
           amount: totalAmount,
           invoicesId: invoiceId,
@@ -117,10 +107,7 @@ const PaymentModal = ({ visible, onClose, items = [] }) => {
         const vnpUrl = paymentRes.vnpUrl || paymentRes.data?.vnpUrl || paymentRes.data?.url
 
         if (vnpUrl) {
-          // --- MỚI THÊM: Lưu ID đơn hàng để lát nữa quay về cập nhật ---
           localStorage.setItem('paying_order_id', singleOrderId)
-
-          // Chuyển hướng
           window.location.href = vnpUrl
         } else {
           throw new Error('Server không trả về link thanh toán')
@@ -168,7 +155,9 @@ const PaymentModal = ({ visible, onClose, items = [] }) => {
           <div className="absolute inset-0 bg-white/90 z-50 flex flex-col items-center justify-center rounded-2xl">
             <Spin size="large" />
             <p className="mt-4 text-orange-600 font-semibold animate-pulse">
-              {paymentMethod === 'Cash' ? 'Đang gửi yêu cầu...' : 'Đang kết nối cổng thanh toán...'}
+              {paymentMethod === 'Cash'
+                ? 'Đang gửi yêu cầu...'
+                : 'Đang kết nối cổng thanh toán...'}
             </p>
           </div>
         )}
@@ -178,7 +167,7 @@ const PaymentModal = ({ visible, onClose, items = [] }) => {
             Tổng tiền
           </Text>
           <div className="text-4xl font-extrabold text-orange-700 mt-2 tracking-tight">
-            {totalAmount.toLocaleString('vi-VN')} <span className="text-2xl align-top">đ</span>
+            {totalAmount.toLocaleString('vi-VN')} <span className="text-2xl">đ</span>
           </div>
         </div>
 
@@ -188,18 +177,10 @@ const PaymentModal = ({ visible, onClose, items = [] }) => {
               key={option.key}
               onClick={() => !isProcessing && setPaymentMethod(option.key)}
               className={`relative flex items-center p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 group
-<<<<<<< HEAD
-                 ${paymentMethod === option.key
+                ${paymentMethod === option.key
                   ? option.activeColor
                   : 'border-gray-100 hover:bg-gray-50'
                 }`}
-=======
-                 ${
-                   paymentMethod === option.key
-                     ? option.activeColor
-                     : 'border-gray-100 hover:bg-gray-50'
-                 }`}
->>>>>>> 505f8f2215f3fb0765ab98e1d13f58d6deff9d9d
             >
               <div className="mr-4">{option.icon}</div>
               <div className="flex-1">

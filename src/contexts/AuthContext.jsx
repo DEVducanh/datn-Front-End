@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
-import http from '@/apis/http' // 1. Import http để gọi API
+import http from '@/apis/http'
 
 const AuthContext = createContext(null)
 
@@ -14,8 +14,12 @@ export const useAuth = () => {
 const getStoredUser = () => {
   try {
     const userString = localStorage.getItem('user') || localStorage.getItem('user_info')
-    if (userString && userString !== 'undefined') return JSON.parse(userString)
-  } catch (error) { return null }
+    if (userString && userString !== 'undefined') {
+      return JSON.parse(userString)
+    }
+  } catch (error) {
+    return null
+  }
 }
 
 const getStoredToken = () => {
@@ -26,41 +30,47 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(getStoredUser)
   const [isLoggedIn, setIsLoggedIn] = useState(!!getStoredToken())
 
+  // --- SỬA HÀM LOGIN: LƯU THỜI GIAN BẮT ĐẦU PHIÊN ---
   const login = (token, userData, isRealUser = false) => {
     if (isRealUser) {
+      // 1. ĐĂNG NHẬP TÀI KHOẢN THẬT (Admin/Member)
       localStorage.setItem('userToken', token)
       localStorage.setItem('user', JSON.stringify(userData))
+
+      // Xóa chế độ Guest
       localStorage.removeItem('access_token')
       localStorage.removeItem('user_info')
+
+      // QUAN TRỌNG: Xóa mốc thời gian session để xem được toàn bộ lịch sử
+      localStorage.removeItem('sessionStartTime')
     } else {
+      // 2. ĐĂNG NHẬP KHÁCH VÃNG LAI (Guest)
       localStorage.setItem('access_token', token)
       localStorage.setItem('user_info', JSON.stringify(userData))
+
+      // QUAN TRỌNG: Lưu lại thời điểm bắt đầu ngồi vào bàn
+      // Để sau này chỉ hiện hóa đơn từ thời điểm này trở đi
+      if (!localStorage.getItem('sessionStartTime')) {
+        localStorage.setItem('sessionStartTime', Date.now().toString())
+      }
     }
+
     setUser(userData)
     setIsLoggedIn(true)
   }
 
-  // --- 2. SỬA HÀM LOGOUT ---
   const logout = async () => {
     console.log('ĐANG ĐĂNG XUẤT & TRẢ BÀN...')
-
-    // Lấy ID bàn hiện tại trước khi xóa Storage
     const currentTableId = localStorage.getItem('currentTableId');
 
-    // Nếu đang ngồi bàn -> Gọi API cập nhật trạng thái bàn thành 'Available'
     if (currentTableId) {
       try {
-        // Gọi API update bàn (Dựa theo Swagger của bạn: PATCH /tables/:id)
-        await http.patch(`/tables/${currentTableId}`, {
-          status: 'Available'
-        });
-        console.log(`Đã trả bàn ${currentTableId} về trạng thái Trống.`);
+        await http.patch(`/tables/${currentTableId}`, { status: 'Available' });
       } catch (error) {
         console.error("Lỗi khi trả bàn:", error);
       }
     }
 
-    // Sau đó mới xóa dữ liệu local
     localStorage.clear()
     setIsLoggedIn(false)
     setUser(null)
