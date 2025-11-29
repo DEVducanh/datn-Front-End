@@ -1,17 +1,58 @@
-import React, { useRef } from 'react'
-import { Button, Divider, Table } from 'antd'
+import React, { useRef, useState, useEffect } from 'react'
+import { Button, Divider, Table, Spin } from 'antd'
+import http from '@/apis/http' // Import axios instance của bạn
 
 const PaymentDetail = ({ order, onClose, onMarkPaid }) => {
   const printRef = useRef(null)
+  const [items, setItems] = useState([]) // State lưu danh sách món
+  const [loading, setLoading] = useState(false)
+
+  // --- LOGIC MỚI: TỰ ĐỘNG LẤY DANH SÁCH MÓN ---
+  useEffect(() => {
+    const fetchOrderItems = async () => {
+      if (!order) return
+
+      // 1. Nếu dữ liệu đã có sẵn trong props thì dùng luôn
+      const existingItems = order.order_item || order.items || []
+      if (existingItems.length > 0) {
+        setItems(existingItems)
+        return
+      }
+
+      // 2. Nếu chưa có, gọi API lấy từ Backend
+      // Tìm Order ID gốc (Vì 'order' ở đây là Invoice, nên cần lấy order_id bên trong nó)
+      // order.order_id có thể là string hoặc object
+      const realOrderId = order.order_id?._id || order.order_id || order._id
+
+      if (!realOrderId) return
+
+      setLoading(true)
+      try {
+        console.log('Đang lấy chi tiết món cho Order ID:', realOrderId)
+        // Gọi lại API mà bạn đã dùng bên Client OrderPage
+        const res = await http.get(`/order-item/order/${realOrderId}`)
+
+        // Xử lý các trường hợp dữ liệu trả về khác nhau
+        let fetchedData = []
+        if (Array.isArray(res)) fetchedData = res
+        else if (res.Orderitems) fetchedData = res.Orderitems
+        else if (res.data) fetchedData = res.data
+
+        setItems(fetchedData)
+      } catch (error) {
+        console.error('Lỗi tải chi tiết món:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchOrderItems()
+  }, [order])
 
   if (!order) return <div>Không có hoá đơn hoặc đang tải chi tiết...</div>
 
-  // 💡 SỬA LỖI: Lấy mảng sản phẩm từ 'order_item' (hoặc 'items' nếu API chưa đồng nhất)
-  const orderItems = order.order_item || order.items || []
-
-  // Tính subtotal: Cần dùng 'quantity' và 'price' từ order_item
-  // Lưu ý: Nếu dish_id không được populate thành tên sản phẩm, cột "Sản phẩm" sẽ trống
-  const subtotal = orderItems.reduce((s, it) => s + (it.quantity || 0) * (it.price || 0), 0)
+  // Tính subtotal từ danh sách món vừa lấy được
+  const subtotal = items.reduce((s, it) => s + (it.quantity || 0) * (it.price || 0), 0)
 
   const handlePrint = () => {
     if (!printRef.current) return
@@ -47,35 +88,32 @@ const PaymentDetail = ({ order, onClose, onMarkPaid }) => {
     )
   }
 
-  // 💡 SỬA LỖI: Lấy thông tin từ cấu trúc API chi tiết mới
   const tableName =
     order.table?.name || order.table_id?.table_name || order.tableName || order.table_id?._id || '-'
   const customerName = order.user?.name || order.user_id?.username || order.customer || '-'
   const invoiceIdDisplay =
     (order._id && `#${String(order._id).slice(-8)}`) || order.orderId || order.code || '-'
 
-  // Tổng số tiền cuối cùng (ưu tiên total_amount từ API)
+  // Tổng số tiền (Ưu tiên lấy từ Invoice, nếu ko có thì tính tổng món)
   const finalTotal = order.total_amount || order.total || subtotal
 
-  // Hàm gọi hành động và log ID
   const handleActionClick = () => {
     const idToLog = getOrderIdForAction()
-    console.log(`[PaymentDetail] Đang gọi hành động cho Hoá đơn ID:`, idToLog)
     onMarkPaid && onMarkPaid(idToLog)
   }
 
-  // 💡 Cột Table: Cần ánh xạ lại trường dữ liệu cho phù hợp với 'order_item'
   const columns = [
     {
-      // Vấn đề: API chi tiết chỉ trả về dish_id, không có tên.
-      // Nếu bạn muốn hiển thị tên, bạn cần API phải populate dish_id.
-      title: '',
-      dataIndex: 'dish_name', // Giả sử API sẽ populate thành dish_name
+      title: 'Tên món',
+      dataIndex: 'dish_id',
       key: 'name',
-      // Tạm thời hiển thị dish_id nếu không có tên
-      render: (_, r) => r.name || r.dish_name || r.dish_id || '-',
+      render: (dishId, r) => {
+        // Xử lý hiển thị tên món an toàn (cho cả trường hợp populate và chưa populate)
+        if (typeof dishId === 'object' && dishId?.dish_name) return dishId.dish_name
+        return r.dish_name || r.name || '---'
+      },
     },
-    { title: 'SL', dataIndex: 'quantity', key: 'qty', align: 'center', render: (v) => v || 0 }, // SỬ DỤNG quantity
+    { title: 'SL', dataIndex: 'quantity', key: 'qty', align: 'center', render: (v) => v || 0 },
     {
       title: 'Đơn giá',
       dataIndex: 'price',
@@ -101,49 +139,41 @@ const PaymentDetail = ({ order, onClose, onMarkPaid }) => {
           <div>
             <strong>Mã hoá đơn:</strong> {invoiceIdDisplay}
           </div>
-
-          {/* 💡 Đã sửa để dùng order.table.name */}
           <div>
             <strong>Bàn:</strong> {tableName}
           </div>
-
-          {/* 💡 Đã sửa để dùng order.user.name */}
           <div>
             <strong>Khách hàng:</strong> {customerName}
           </div>
-
           <div>
             <strong>Nhân viên:</strong>{' '}
             {order.servedByName || order.servedBy || order.staffName || '-'}
           </div>
-
-          {/* 💡 Đã sửa để dùng created_at */}
           <div>
             <strong>Ngày:</strong> {formatDate(order.created_at || order.createdAt)}
           </div>
-
-          {/* 💡 Hiển thị trạng thái */}
           <div>
             <strong>Trạng thái:</strong> {order.status || '-'}
           </div>
         </div>
 
-        <Table
-          size="small"
-          pagination={false}
-          // 💡 SỬ DỤNG orderItems (đã được định nghĩa là order.order_item)
-          dataSource={orderItems.map((it, i) => ({ key: i, ...it }))}
-          columns={columns}
-          footer={() => (
-            <div style={{ textAlign: 'right', fontWeight: 600 }}>
-              Tạm tính: {subtotal.toLocaleString('vi-VN')}₫ — Tổng:{' '}
-              {finalTotal.toLocaleString('vi-VN')}₫
-            </div>
-          )}
-          rowKey="key"
-        />
+        {/* Bảng món ăn (Có loading) */}
+        <Spin spinning={loading}>
+          <Table
+            size="small"
+            pagination={false}
+            dataSource={items.map((it, i) => ({ key: it._id || i, ...it }))}
+            columns={columns}
+            locale={{ emptyText: 'Không tìm thấy chi tiết món ăn' }}
+            footer={() => (
+              <div style={{ textAlign: 'right', fontWeight: 600 }}>
+                Tạm tính: {subtotal.toLocaleString('vi-VN')}₫ — Tổng:{' '}
+                {finalTotal.toLocaleString('vi-VN')}₫
+              </div>
+            )}
+          />
+        </Spin>
 
-        {/* 💡 Hiển thị thông tin thanh toán và giao dịch */}
         {(order.payment || order.transaction) && (
           <div
             style={{
@@ -153,26 +183,22 @@ const PaymentDetail = ({ order, onClose, onMarkPaid }) => {
               textAlign: 'right',
             }}
           >
-            {/* 💡 Payment Info */}
             {order.payment && (
               <>
                 <div> Phương thức TT: {order.payment.method || '-'}</div>
                 <div> Trạng thái TT: {order.payment.status || '-'}</div>
                 <div>
-                  {' '}
                   Số tiền đã trả (Payment):{' '}
                   {order.payment.amount_paid?.toLocaleString('vi-VN') || 0}₫
                 </div>
               </>
             )}
-            {/* 💡 Transaction Info */}
             {order.transaction && (
               <>
                 <Divider style={{ margin: '8px 0' }} />
                 <div> Trạng thái Giao dịch: {order.transaction.status || '-'}</div>
                 <div> Loại Giao dịch: {order.transaction.type || '-'}</div>
                 <div>
-                  {' '}
                   Số tiền GD: {order.transaction.amount_paid?.toLocaleString('vi-VN') || 0}₫
                 </div>
                 <div> Ngày GD: {formatDate(order.transaction.created_at)}</div>

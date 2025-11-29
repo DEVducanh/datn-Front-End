@@ -5,7 +5,8 @@ import { Input, Spin } from 'antd'
 import { Search } from 'lucide-react'
 import ProductGrid from '@/layouts/DefaultLayout/components/ProductGrid'
 import { useLocation, useNavigate, useParams } from 'react-router'
-import { useMessage } from '@/contexts/MessageProvider' // <--- 1. Import lại hook message
+import { useMessage } from '@/contexts/MessageProvider'
+import { jwtDecode } from 'jwt-decode'
 
 const HERO_IMAGE_URL =
   'https://images.unsplash.com/photo-1504674900247-0877df9cc836?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1280'
@@ -125,9 +126,12 @@ const CategoryPage = () => {
     mutationFn: (payload) => http.post('/cart/add-item', payload),
     onSuccess: (_, variables) => {
       message.success(`Đã thêm "${variables.dishName}" vào giỏ!`)
-      const { user_id, table_id } = variables
-      if (table_id && user_id) {
-        queryClient.invalidateQueries({ queryKey: ['cart', table_id, user_id] })
+      const currentTableId = localStorage.getItem('currentTableId') || variables.table_id
+      if (currentTableId) {
+        console.log('Làm mới giỏ hàng cho bàn:', currentTableId)
+        queryClient.invalidateQueries({
+          queryKey: ['cart', currentTableId],
+        })
       }
     },
     onError: (err) => {
@@ -145,24 +149,28 @@ const CategoryPage = () => {
 
   // --- 5. Xử lý nút Thêm ---
   const handleAddToCart = (product) => {
-    // A. Lấy User ID
-    // let userId = null
-    // try {
-    //   const userString = localStorage.getItem('user') || localStorage.getItem('user_info')
+    let userId = null
 
-    //   if (!userString) {
-    //     message.warning('Bạn cần đăng nhập để gọi món.')
-    //     navigate(
-    //       `/flareon/login?redirect=${encodeURIComponent(location.pathname + location.search)}`
-    //     )
-    //     return
-    //   }
-    //   const userData = JSON.parse(userString)
-    //   userId = userData?._id
-    // } catch (e) {
-    //   console.error(e)
-    // }
+    // A. Lấy và Giải mã Token
+    try {
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
 
+      if (token) {
+        const decoded = jwtDecode(token)
+        // Backend thường lưu ID trong token dưới tên: _id, id, hoặc sub.
+        // Bạn check thử xem cái nào đúng nhé. Thường là _id hoặc id.
+        userId = decoded._id || decoded.id || decoded.sub
+      } else {
+        // Nếu bắt buộc đăng nhập mới được gọi món thì mở dòng dưới ra:
+        // message.warning('Vui lòng đăng nhập để gọi món.')
+        // navigate(`/flareon/login?redirect=${encodeURIComponent(location.pathname)}`)
+        // return
+      }
+    } catch (e) {
+      console.error('Lỗi giải mã token:', e)
+    }
+
+    // B. Lấy Table ID
     const tableIdToSend = localStorage.getItem('currentTableId') || qrCode
 
     if (!tableIdToSend) {
@@ -175,7 +183,7 @@ const CategoryPage = () => {
       table_id: tableIdToSend,
       dish_id: product._id,
       quantity: 1,
-      user_id: userId,
+      user_id: userId, // ID lấy từ token (hoặc null nếu khách vãng lai)
       dishName: product.name,
     })
   }
