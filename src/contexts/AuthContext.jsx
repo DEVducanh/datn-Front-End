@@ -1,9 +1,8 @@
 import { createContext, useContext, useState, useEffect } from 'react'
+import http from '@/apis/http' // 1. Import http để gọi API
 
-// 1. Tạo Context Object
 const AuthContext = createContext(null)
 
-// 2. Custom Hook
 export const useAuth = () => {
   const context = useContext(AuthContext)
   if (!context) {
@@ -12,93 +11,70 @@ export const useAuth = () => {
   return context
 }
 
-// Hàm tiện ích lấy user (Hỗ trợ cả user thường và user_info của khách)
 const getStoredUser = () => {
   try {
-    // Ưu tiên lấy 'user' (admin/staff), nếu không có thì lấy 'user_info' (khách)
     const userString = localStorage.getItem('user') || localStorage.getItem('user_info')
-    if (userString && userString !== 'undefined') {
-      return JSON.parse(userString)
-    }
-  } catch (error) {
-    console.error('Lỗi parse user:', error)
-  }
-  return null
+    if (userString && userString !== 'undefined') return JSON.parse(userString)
+  } catch (error) { return null }
 }
 
-// Hàm tiện ích lấy token
 const getStoredToken = () => {
-  return (
-    localStorage.getItem('access_token') ||
-    localStorage.getItem('userToken') ||
-    localStorage.getItem('token')
-  )
+  return localStorage.getItem('userToken') || localStorage.getItem('access_token')
 }
 
-// 3. Provider Component
 export const AuthProvider = ({ children }) => {
-  // Khởi tạo state từ localStorage
   const [user, setUser] = useState(getStoredUser)
   const [isLoggedIn, setIsLoggedIn] = useState(!!getStoredToken())
 
-  // Hàm Đăng nhập (Dùng chung cho cả Admin và Khách)
-  const login = (token, userData) => {
-    // 1. Lưu token chuẩn vào access_token
-    localStorage.setItem('access_token', token)
-    // (Giữ lại userToken để tương thích code cũ nếu cần)
-    localStorage.setItem('userToken', token)
-
-    // 2. Lưu thông tin user
-    if (userData) {
-      // Lưu vào cả 2 key để đảm bảo code cũ/mới đều chạy
+  const login = (token, userData, isRealUser = false) => {
+    if (isRealUser) {
+      localStorage.setItem('userToken', token)
       localStorage.setItem('user', JSON.stringify(userData))
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('user_info')
+    } else {
+      localStorage.setItem('access_token', token)
       localStorage.setItem('user_info', JSON.stringify(userData))
-      setUser(userData)
     }
-
+    setUser(userData)
     setIsLoggedIn(true)
   }
 
-  // Hàm Đăng xuất
-  const logout = () => {
-    console.log('ĐÃ ĐĂNG XUẤT')
-    // Xóa sạch mọi dấu vết
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('userToken')
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
-    localStorage.removeItem('user_info')
-    localStorage.removeItem('currentTableId') // Xóa luôn mã bàn để reset
+  // --- 2. SỬA HÀM LOGOUT ---
+  const logout = async () => {
+    console.log('ĐANG ĐĂNG XUẤT & TRẢ BÀN...')
 
+    // Lấy ID bàn hiện tại trước khi xóa Storage
+    const currentTableId = localStorage.getItem('currentTableId');
+
+    // Nếu đang ngồi bàn -> Gọi API cập nhật trạng thái bàn thành 'Available'
+    if (currentTableId) {
+      try {
+        // Gọi API update bàn (Dựa theo Swagger của bạn: PATCH /tables/:id)
+        await http.patch(`/tables/${currentTableId}`, {
+          status: 'Available'
+        });
+        console.log(`Đã trả bàn ${currentTableId} về trạng thái Trống.`);
+      } catch (error) {
+        console.error("Lỗi khi trả bàn:", error);
+      }
+    }
+
+    // Sau đó mới xóa dữ liệu local
+    localStorage.clear()
     setIsLoggedIn(false)
     setUser(null)
-
-    // Reload trang để reset toàn bộ state của ứng dụng
-    window.location.href = '/flareon'
+    window.location.href = '/flareon/login'
   }
 
-  // useEffect để đồng bộ state nếu localStorage bị thay đổi bên ngoài
   useEffect(() => {
     const token = getStoredToken()
     const userData = getStoredUser()
-
-    if (token && !isLoggedIn) {
-      setIsLoggedIn(true)
-    }
-    if (userData && !user) {
-      setUser(userData)
-    }
+    if (token && !isLoggedIn) setIsLoggedIn(true)
+    if (userData && !user) setUser(userData)
   }, [])
 
-  const getUser = () => user
-
-  const contextValue = {
-    isLoggedIn,
-    user,
-    login,
-    logout,
-    getUser,
-  }
+  const contextValue = { isLoggedIn, user, login, logout, getUser: () => user }
 
   return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>
 }

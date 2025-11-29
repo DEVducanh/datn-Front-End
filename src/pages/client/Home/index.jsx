@@ -4,6 +4,7 @@ import Categories from '@/layouts/DefaultLayout/components/Categories'
 import Features from '@/layouts/DefaultLayout/components/Features'
 import Hero from '@/layouts/DefaultLayout/components/Hero'
 import Products from '@/layouts/DefaultLayout/components/Products'
+import { Spin } from 'antd'
 
 const Home = () => {
   const location = useLocation()
@@ -12,11 +13,9 @@ const Home = () => {
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search)
 
-    // 1. Ưu tiên lấy mã bàn từ URL, nếu không có thì lấy trong kho lưu trữ
+    // 1. Lấy mã bàn (Ưu tiên URL, sau đó là Storage)
     const urlTableId = searchParams.get('table_id')
     const storedTableId = localStorage.getItem('currentTableId')
-
-    // Đây là biến quan trọng nhất: ID bàn đang hoạt động
     const activeTableId = urlTableId || storedTableId
 
     // 2. Lấy thông tin xác thực
@@ -26,24 +25,25 @@ const Home = () => {
     // Xử lý token rác
     if (token === 'null' || token === 'undefined') token = null;
 
-    // --- LOGIC KIỂM TRA NGHIÊM NGẶT ---
+    // --- LOGIC KIỂM TRA ---
     if (activeTableId) {
-      // Nếu đã xác định được bàn (dù từ URL hay từ Storage)
-
-      // Cập nhật lại kho lưu trữ nếu có ID mới từ URL
+      // Cập nhật lại kho nếu có ID mới từ URL
       if (urlTableId) {
         localStorage.setItem('currentTableId', urlTableId)
       }
 
       // KIỂM TRA: Nếu thiếu Token HOẶC thiếu UserInfo -> ĐÁ VỀ TRANG NHẬP TÊN
       if (!token || !userInfo || userInfo === 'undefined') {
-        console.log("🚫 Phát hiện ngồi bàn nhưng chưa nhập tên -> Chuyển hướng...")
-        // Chuyển hướng kèm theo mã bàn để form tự điền
-        navigate(`/guest-login?table_id=${activeTableId}`)
+        console.log("🚫 Chưa đăng nhập đủ -> Chuyển hướng CỨNG sang GuestLogin...")
+
+        // SỬA QUAN TRỌNG: Dùng window.location.href để ép chuyển trang
+        window.location.href = `/guest-login?table_id=${activeTableId}`
+        return; // Dừng luôn code ở đây
       }
       else {
         console.log("✅ Đã đầy đủ thông tin -> Cho phép ở lại")
-        // Nếu trên URL vẫn còn ?table_id thì xóa đi cho đẹp
+
+        // Nếu trên URL vẫn còn ?table_id thì xóa đi cho đẹp (Dùng navigate replace là được)
         if (urlTableId) {
           searchParams.delete('table_id')
           navigate(

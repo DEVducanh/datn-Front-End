@@ -1,21 +1,21 @@
-// src/api/http.js
 import axios from 'axios'
 
 const http = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080',
+  baseURL: import.meta.env.VITE_API_URL || 'https://api-datn-orderfood-backend-2.onrender.com',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
   },
 })
 
-// Request Interceptor (Gửi đi)
+// Request Interceptor
 http.interceptors.request.use(
   function (config) {
-    const token =
-      localStorage.getItem('access_token') ||
-      localStorage.getItem('userToken') ||
-      localStorage.getItem('token')
+    // --- THỨ TỰ ƯU TIÊN QUAN TRỌNG ---
+    // 1. Ưu tiên 'userToken' (Tài khoản thật)
+    // 2. Sau đó mới đến 'access_token' (Khách vãng lai)
+    const token = localStorage.getItem('userToken') || localStorage.getItem('access_token')
+    
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -26,16 +26,15 @@ http.interceptors.request.use(
   }
 )
 
-// Response Interceptor (Nhận về) - ĐÃ NÂNG CẤP
+// Response Interceptor (Giữ nguyên logic bắt Guest Token)
 http.interceptors.response.use(
   function (response) {
-    // 1. In toàn bộ header ra để soi (nếu cần)
-    // console.log("Headers nhận được:", response.headers)
+    // Chỉ bắt Guest Token nếu chưa có User Token (để tránh ghi đè tài khoản thật)
+    const guestToken = response.headers['x-guest-token'] || response.headers['X-Guest-Token'];
+    const hasRealUser = localStorage.getItem('userToken');
 
-    // 2. Lấy token (Thử cả viết hoa và viết thường cho chắc ăn)
-    const guestToken = response.headers['x-guest-token'] || response.headers['X-Guest-Token']
-
-    if (guestToken) {
+    if (guestToken && !hasRealUser) {
+      // console.log("🔥 Guest Token:", guestToken)
       localStorage.setItem('access_token', guestToken)
     }
 

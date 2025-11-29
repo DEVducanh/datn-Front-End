@@ -16,6 +16,8 @@ const Login = () => {
   const navigate = useNavigate()
   const [form] = Form.useForm()
   const message = useMessage()
+
+  // Lấy hàm login từ Context
   const { login } = useAuth()
 
   const loginMutation = useMutation({
@@ -25,12 +27,14 @@ const Login = () => {
       const userObject = data.user
 
       if (token && userObject && userObject._id) {
-        login(token, userObject)
+        // --- SỬA ĐOẠN NÀY ---
+        // Gọi hàm login với tham số thứ 3 là TRUE (Đây là Real User)
+        login(token, userObject, true)
 
         message.success('Đăng nhập thành công!')
         navigate('/')
       } else {
-        message.error('Lỗi Dữ liệu')
+        message.error('Lỗi Dữ liệu: Không nhận được thông tin user')
       }
     },
 
@@ -41,10 +45,7 @@ const Login = () => {
         'Đăng nhập thất bại. Vui lòng kiểm tra email và mật khẩu.'
 
       const serverStatus = error.response?.status
-
-      const message = serverMessage
-
-      message.error(`Lỗi Đăng nhập (${serverStatus || 'Lỗi Mạng/Client'})`)
+      message.error(`Lỗi Đăng nhập: ${serverMessage} (${serverStatus || 'Network Error'})`)
     },
   })
 
@@ -58,7 +59,6 @@ const Login = () => {
   }
 
   return (
-    // ... (Phần JSX giữ nguyên)
     <div className="flex flex-col items-center justify-start min-h-screen bg-white">
       <header className="w-full flex justify-between items-center p-4">
         <Link
@@ -80,7 +80,7 @@ const Login = () => {
 
         <Form form={form} layout="vertical" onFinish={onFinish}>
           <Form.Item
-            name="email" // Trường Email
+            name="email"
             rules={[
               { required: true, message: 'Vui lòng nhập Email!' },
               { type: 'email', message: 'Email không đúng định dạng!' },
@@ -93,11 +93,11 @@ const Login = () => {
           </Form.Item>
 
           <Form.Item
-            name="password" // Trường Mật khẩu
+            name="password"
             rules={[{ required: true, message: 'Vui lòng nhập Mật Khẩu!' }]}
             hasFeedback
           >
-            <Input.Password // Dùng Input.Password
+            <Input.Password
               placeholder="Mật Khẩu"
               className="!rounded-lg !h-14 !text-lg placeholder:!text-orange-500 !border-orange-500"
             />
@@ -110,7 +110,7 @@ const Login = () => {
               htmlType="submit"
               block
               size="large"
-              loading={loginMutation.isPending} // Hiển thị loading
+              loading={loginMutation.isPending}
               className="!h-14 !rounded-lg !text-xl !font-bold !bg-orange-500 hover:!bg-orange-600 !border-none"
             >
               Đăng nhập
@@ -129,13 +129,12 @@ const Login = () => {
           <Button
             block
             size="large"
-            onClick={() => navigate('/register')} // Chuyển hướng đến trang Đăng ký
+            onClick={() => navigate('/register')}
             className="!h-14 !rounded-lg !text-lg !font-semibold !bg-gray-100 !border-none hover:!bg-gray-200"
           >
             Đăng ký
           </Button>
 
-          {/* Continue with Google */}
           <Button
             block
             size="large"
@@ -145,28 +144,17 @@ const Login = () => {
             Continue with Google
           </Button>
         </div>
-
-        <Button
-          block
-          size="large"
-          icon={<img src={GL_Logo} alt="Google" className="h-6 mr-2" />}
-          className="!h-14 !rounded-lg !text-lg !font-semibold !bg-gray-100 hover:!bg-gray-200"
-        >
-          Continue with Google
-        </Button>
       </div>
 
       {/* Chính sách */}
       <div className="text-center text-xs text-gray-500 mb-20 px-4 mt-10">
         <Text type="secondary" className="!text-gray-500 text-sm">
           Bằng cách tiếp tục, bạn đồng ý với
-          <Link href="/terms" className="!font-bold !text-gray-800 hover:!text-orange-500">
-            {' '}
-            Điều khoản sử dụng{' '}
+          <Link href="/terms" className="!font-bold !text-gray-800 hover:!text-orange-500 ml-1 mr-1">
+            Điều khoản sử dụng
           </Link>
           và
-          <Link href="/privacy" className="!font-bold !text-gray-800 hover:!text-orange-500">
-            {' '}
+          <Link href="/privacy" className="!font-bold !text-gray-800 hover:!text-orange-500 ml-1">
             Chính sách bảo mật
           </Link>
         </Text>
