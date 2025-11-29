@@ -16,31 +16,39 @@ const CashierPage = () => {
     queryKey: ['cashier-orders'],
     queryFn: async () => {
       const res = await http.get('/orders')
-      const data = res.data?.data || res.data || []
+      const data = res.data?.data || res.data || [] // Xử lý các dạng trả về
+
       if (!Array.isArray(data)) return []
 
+      // --- LOGIC LỌC ĐƠN HÀNG (ĐÃ SỬA) ---
       // Thu ngân cần thấy:
-      // 1. Đơn "Pending Payment" (Khách yêu cầu thanh toán) - Ưu tiên
-      // 2. Đơn đang ăn ("Processing", "Served") để thanh toán bất cứ lúc nào
-      // Bỏ qua đơn đã Completed hoặc Cancelled
+      // 1. Pending Payment: Khách gọi thanh toán.
+      // 2. Completed: Đã chốt món xong xuôi, đang chờ thu tiền (quan trọng).
+      // 3. Processing/Served: Đang ăn.
+      // CHỈ ẨN: Paid (Đã xong hẳn) và Cancelled (Đã hủy)
       return data
-        .filter((o) => o.status !== 'Completed' && o.status !== 'Cancelled' && o.status !== 'Paid')
+        .filter((o) => o.status !== 'Paid' && o.status !== 'Cancelled')
         .sort((a, b) => {
-          // Đưa đơn "Pending Payment" lên đầu
-          if (a.status === 'Pending Payment') return -1
-          if (b.status === 'Pending Payment') return 1
-          return 0
+          // Ưu tiên 1: Pending Payment (Đỏ)
+          if (a.status === 'Pending Payment' && b.status !== 'Pending Payment') return -1
+          if (b.status === 'Pending Payment' && a.status !== 'Pending Payment') return 1
+
+          // Ưu tiên 2: Completed (Cần thu tiền ngay)
+          if (a.status === 'Completed' && b.status !== 'Completed') return -1
+          if (b.status === 'Completed' && a.status !== 'Completed') return 1
+
+          return new Date(b.createdAt) - new Date(a.createdAt) // Mới nhất lên đầu
         })
     },
-    refetchInterval: 5000,
+    refetchInterval: 5000, // Tự động refresh mỗi 5s
   })
 
   // Lọc theo tìm kiếm
-  const filteredOrders = orders.filter(
-    (o) =>
-      (o.table_id?.name || '').toLowerCase().includes(searchText.toLowerCase()) ||
-      o._id.includes(searchText)
-  )
+  const filteredOrders = orders.filter((o) => {
+    // Xử lý an toàn tên bàn
+    const tableName = o.table_id?.name || o.table_id?.table_name || 'Mang về'
+    return tableName.toLowerCase().includes(searchText.toLowerCase()) || o._id.includes(searchText)
+  })
 
   const handleOpenPayment = (order) => {
     setSelectedOrder(order)
@@ -51,7 +59,11 @@ const CashierPage = () => {
     {
       title: 'Bàn',
       dataIndex: 'table_id',
-      render: (table) => <span className="font-bold text-lg">{table?.name || 'Mang về'}</span>,
+      render: (table) => {
+        // Xử lý hiển thị an toàn
+        const name = table?.name || table?.table_name || '---'
+        return <span className="font-bold text-lg">{name}</span>
+      },
     },
     {
       title: 'Mã đơn',
@@ -70,14 +82,23 @@ const CashierPage = () => {
       dataIndex: 'status',
       render: (status) => {
         let color = 'default'
-        if (status === 'Pending Payment') color = 'red' // Cần chú ý
-        if (status === 'Served') color = 'green'
+        let text = status
+        let className = ''
+
+        if (status === 'Pending Payment') {
+          color = 'red'
+          text = 'KHÁCH GỌI THANH TOÁN'
+          className = 'animate-pulse font-bold'
+        } else if (status === 'Completed') {
+          color = 'purple'
+          text = 'CHỜ THU TIỀN' // Đã xong quy trình bếp, chờ tiền
+        } else if (status === 'Served') {
+          color = 'green'
+        }
+
         return (
-          <Tag
-            color={color}
-            className={status === 'Pending Payment' ? 'animate-pulse font-bold' : ''}
-          >
-            {status === 'Pending Payment' ? 'YÊU CẦU TT' : status}
+          <Tag color={color} className={className}>
+            {text}
           </Tag>
         )
       },
@@ -91,7 +112,9 @@ const CashierPage = () => {
           icon={<DollarOutlined />}
           onClick={() => handleOpenPayment(record)}
           className={
-            record.status === 'Pending Payment' ? 'bg-red-500 hover:bg-red-400 border-red-500' : ''
+            record.status === 'Pending Payment'
+              ? 'bg-red-500 hover:bg-red-400 border-red-500 shadow-md'
+              : 'bg-blue-600'
           }
         >
           Thu tiền
@@ -129,6 +152,11 @@ const CashierPage = () => {
               value={orders.filter((o) => o.status === 'Pending Payment').length}
               valueStyle={{ color: '#cf1322' }}
             />
+            <Statistic
+              title="Chờ thu tiền"
+              value={orders.filter((o) => o.status === 'Completed').length}
+              valueStyle={{ color: '#722ed1' }}
+            />
           </Col>
         </Row>
       </div>
@@ -139,6 +167,7 @@ const CashierPage = () => {
           columns={columns}
           rowKey="_id"
           pagination={{ pageSize: 8 }}
+          locale={{ emptyText: 'Không có đơn hàng nào cần xử lý' }}
         />
       </Card>
 

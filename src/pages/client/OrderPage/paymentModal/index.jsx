@@ -188,10 +188,18 @@ const PaymentModal = ({ visible, onClose, items = [] }) => {
               key={option.key}
               onClick={() => !isProcessing && setPaymentMethod(option.key)}
               className={`relative flex items-center p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 group
+<<<<<<< HEAD
                  ${paymentMethod === option.key
                   ? option.activeColor
                   : 'border-gray-100 hover:bg-gray-50'
                 }`}
+=======
+                 ${
+                   paymentMethod === option.key
+                     ? option.activeColor
+                     : 'border-gray-100 hover:bg-gray-50'
+                 }`}
+>>>>>>> 505f8f2215f3fb0765ab98e1d13f58d6deff9d9d
             >
               <div className="mr-4">{option.icon}</div>
               <div className="flex-1">
