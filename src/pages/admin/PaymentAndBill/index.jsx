@@ -1,291 +1,350 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react'
-import { Card, Table, Button, Modal, Breadcrumb, message, Select, Spin, Input } from 'antd'
-import { EyeOutlined } from '@ant-design/icons'
+import React, { useState, useMemo } from 'react'
+import {
+  Card,
+  Table,
+  Button,
+  Modal,
+  Breadcrumb,
+  message,
+  Select,
+  Input,
+  Tag,
+  Space,
+  Tooltip,
+  Typography,
+} from 'antd'
+import {
+  EyeOutlined,
+  SearchOutlined,
+  ReloadOutlined,
+  FilterOutlined,
+  DollarOutlined,
+} from '@ant-design/icons'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import dayjs from 'dayjs' // Khuyên dùng dayjs để format ngày tháng chuẩn hơn
 
+// Giả sử đường dẫn API
 import invoiceAPI from '@/apis/invoice/invoice.api'
 import orderAPI from '@/apis/order/order'
 
-// Giả sử các component con này tồn tại trong cùng thư mục
+// Component con
 import PaymentDetail from './paymentDetail'
-import ShearchPayment from './shearchPayment'
-import FilterPayment from './filterPayment'
 
 const { Option } = Select
+const { Title, Text } = Typography
+
+// --- CẤU HÌNH UI CHO TRẠNG THÁI ---
+const STATUS_MAP = {
+  paid: { color: 'success', label: 'Đã thanh toán' },
+  unpaid: { color: 'error', label: 'Chưa thanh toán' },
+  'pending payment': { color: 'warning', label: 'Chờ thanh toán' },
+  completed: { color: 'processing', label: 'Hoàn thành (Chờ thu)' },
+  default: { color: 'default', label: 'Khác' },
+}
+
+const formatCurrency = (amount) => {
+  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0)
+}
 
 const PaymentAndBill = () => {
-  const [orders, setOrders] = useState([])
-  const [allOrders, setAllOrders] = useState([])
-  const [tableNamesMap, setTableNamesMap] = useState({})
+  const queryClient = useQueryClient()
 
-  const [loadingOrders, setLoadingOrders] = useState(false)
-  const [loadingDetail, setLoadingDetail] = useState(false)
+  // --- STATE ---
+  const [searchText, setSearchText] = useState('')
   const [selectedTable, setSelectedTable] = useState(null)
-  const [selectedOrder, setSelectedOrder] = useState(null)
-  const [detailOpen, setDetailOpen] = useState(false)
   const [statusFilter, setStatusFilter] = useState(null)
 
-  // Hàm lọc theo Bàn (Sử dụng useCallback để tối ưu)
-  const filterByTable = useCallback((ordersList, tableId) => {
-    if (!tableId) return ordersList
-    return (ordersList || []).filter(o => {
-      const invoiceTableId = o.table_id?._id || o.table_id
-      return String(invoiceTableId) === String(tableId)
-    })
-  }, [])
+  const [selectedOrder, setSelectedOrder] = useState(null)
+  const [detailOpen, setDetailOpen] = useState(false)
 
-  // Hàm lọc theo Trạng thái
-  const filterByStatus = (ordersList, status) => {
-    if (!status) return ordersList
-    return (ordersList || []).filter(o => String(o.status || '').toLowerCase() === String(status).toLowerCase())
-  }
-
-  const fetchInvoices = async () => {
-    setLoadingOrders(true)
-    try {
+  // --- 1. LẤY DỮ LIỆU (React Query) ---
+  const {
+    data: rawInvoices = [],
+    isLoading,
+    isFetching,
+  } = useQuery({
+    queryKey: ['invoices'],
+    queryFn: async () => {
       const res = await invoiceAPI.getAll()
-      const data = res?.data || []
+      return res.data?.data || res.data || [] // Xử lý các trường hợp trả về của API
+    },
+    staleTime: 1000 * 60, // Cache trong 1 phút
+  })
 
-      const merged = (data || []).map(o => {
-        const customerName = o.user_id?.username || '-'
-        const tableName = o.table_id?.table_name || 'N/A'
-        const totalAmount = o.total_amount || o.total || 0
-        const orderId = o._id?.slice(-8) || '-'
+  // --- 2. XỬ LÝ & LỌC DỮ LIỆU (useMemo) ---
+  const { processedData, tableOptions } = useMemo(() => {
+    // A. Chuẩn hóa dữ liệu đầu vào
+    const formatted = rawInvoices.map((item) => ({
+      ...item,
+      key: item._id,
+      orderId: item._id?.slice(-6).toUpperCase() || '---',
+      tableName: item.table_id?.table_name || item.table_id?.name || 'Mang về',
+      customerName: item.user_id?.username || item.user_id?.name || 'Khách lẻ',
+      staffName: item.served_by?.name || item.servedBy || '-',
+      totalAmount: item.total_amount || item.total || item.amount || 0,
+      createdAt: item.createdAt || item.created_at,
+      status: (item.status || 'unknown').toLowerCase(), // Chuẩn hóa status về chữ thường
+    }))
 
-        return {
-          ...o,
-          customer: customerName,
-          total: totalAmount,
-          orderId: orderId,
-          tableName: tableName,
-          table_id: o.table_id
-        }
-      })
-
-      // Tạo map danh sách bàn để hiển thị dropdown
-      const map = {}
-      merged.forEach(o => {
-        const id = o.table_id?._id || o.table_id
-        const name = o.table_id?.table_name || 'Bàn Khác'
-        if (id) {
-          map[String(id)] = { id: id, name: name }
-        }
-      })
-      setTableNamesMap(map)
-
-      setAllOrders(merged)
-
-      // Áp dụng bộ lọc hiện tại
-      let result = merged
-      if (selectedTable) {
-        result = filterByTable(result, selectedTable)
+    // B. Tạo danh sách bàn cho Select (Unique)
+    const tablesMap = new Map()
+    formatted.forEach((item) => {
+      const tId = item.table_id?._id || item.table_id
+      if (tId && !tablesMap.has(tId)) {
+        tablesMap.set(tId, { id: tId, name: item.tableName })
       }
-      if (statusFilter) {
-        result = filterByStatus(result, statusFilter)
-      }
-      setOrders(result)
-
-    } catch (err) {
-      message.error('Tải danh sách hóa đơn thất bại')
-    } finally {
-      setLoadingOrders(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchInvoices()
-  }, [])
-
-  const onTableChange = (tableId) => {
-    setSelectedTable(tableId)
-    let filtered = filterByTable(allOrders, tableId)
-    if (statusFilter) {
-      filtered = filterByStatus(filtered, statusFilter)
-    }
-    setOrders(filtered)
-  }
-
-  const fetchDetailAndOpenModal = async (invoiceSummary) => {
-    const id = invoiceSummary._id || invoiceSummary.id
-    if (!id) {
-      message.error('Không tìm thấy ID hóa đơn.')
-      return
-    }
-
-    setLoadingDetail(true)
-    try {
-      const res = await invoiceAPI.getById(id)
-      const detailedData = res?.data || res
-      setSelectedOrder({
-        ...invoiceSummary,
-        ...detailedData
-      })
-      setDetailOpen(true)
-    } catch (err) {
-      message.error('Tải chi tiết hóa đơn thất bại.')
-    } finally {
-      setLoadingDetail(false)
-    }
-  }
-
-  // Alias cho hàm mở chi tiết
-  const openDetail = fetchDetailAndOpenModal
-
-  const markPaid = async (order) => {
-    const id = order._id || order.id || order.order_id || order.key || order
-    if (!id) {
-      message.error('Không xác định được ID hóa đơn')
-      return
-    }
-
-    const current = order.status || ''
-    const isCurrentlyPaid = ['paid', 'Paid', 'completed', 'Completed', 'done', 'Done'].includes(String(current))
-    const newStatus = isCurrentlyPaid ? 'unpaid' : 'paid'
-
-    try {
-      if (orderAPI.updateStatus) {
-        await orderAPI.updateStatus(id, newStatus)
-      } else if (orderAPI.update) {
-        await orderAPI.update(id, { status: newStatus })
-      } else if (orderAPI.patch) {
-        await orderAPI.patch(id, { status: newStatus })
-      } else {
-        message.error("Không tìm thấy hàm API để cập nhật trạng thái")
-        return
-      }
-      message.success(isCurrentlyPaid ? 'Đã chuyển về Unpaid' : 'Cập nhật trạng thái: đã thanh toán')
-      await fetchInvoices()
-      setDetailOpen(false)
-    } catch (err) {
-      console.error("Lỗi markPaid:", err)
-      message.error('Cập nhật trạng thái thất bại')
-    }
-  }
-
-  const handleSearch = (term) => {
-    const q = String(term || '').trim().toLowerCase()
-
-    // Lọc dựa trên danh sách gốc (allOrders)
-    const filtered = (allOrders || []).filter(o => {
-      const code = String(o.orderId || o.code || o._id || '').toLowerCase()
-      const customer = String(o.customer || '').toLowerCase()
-      return code.includes(q) || customer.includes(q)
     })
 
-    // Áp dụng thêm filter bàn nếu có
-    const result = selectedTable ? filterByTable(filtered, selectedTable) : filtered
+    // C. Lọc dữ liệu
+    const filtered = formatted.filter((item) => {
+      // Lọc theo từ khóa (Mã đơn hoặc Tên khách)
+      const matchesSearch =
+        item.orderId.toLowerCase().includes(searchText.toLowerCase()) ||
+        item.customerName.toLowerCase().includes(searchText.toLowerCase())
 
-    // Áp dụng thêm filter status nếu có
-    const finalResult = statusFilter ? filterByStatus(result, statusFilter) : result
+      // Lọc theo bàn
+      const matchesTable = selectedTable
+        ? String(item.table_id?._id || item.table_id) === String(selectedTable)
+        : true
 
-    setOrders(finalResult)
-  }
+      // Lọc theo trạng thái
+      const matchesStatus = statusFilter ? item.status === statusFilter.toLowerCase() : true
 
-  const handleFilterStatus = (status) => {
-    // Giữ nguyên logic handleFilterStatus
-    setStatusFilter(status)
-    let base = allOrders
-    if (selectedTable) {
-      base = filterByTable(base, selectedTable)
+      return matchesSearch && matchesTable && matchesStatus
+    })
+
+    // Sắp xếp mới nhất lên đầu
+    filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+
+    return {
+      processedData: filtered,
+      tableOptions: Array.from(tablesMap.values()),
     }
-    const filtered = filterByStatus(base, status)
-    setOrders(filtered)
+  }, [rawInvoices, searchText, selectedTable, statusFilter])
+
+  // --- 3. MUTATION: CẬP NHẬT TRẠNG THÁI ---
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ id, newStatus }) => {
+      // Ưu tiên gọi patch status
+      return await orderAPI.patch(id, { status: newStatus })
+    },
+    onSuccess: () => {
+      message.success('Cập nhật trạng thái thành công!')
+      queryClient.invalidateQueries(['invoices']) // Tải lại danh sách
+      setDetailOpen(false)
+    },
+    onError: () => {
+      message.error('Có lỗi xảy ra khi cập nhật trạng thái.')
+    },
+  })
+
+  const handleMarkPaid = (order) => {
+    if (!order?._id) return
+    const currentStatus = order.status
+    const isPaid = currentStatus === 'paid'
+
+    // Logic đảo ngược trạng thái (hoặc set cứng thành Paid tùy nghiệp vụ)
+    const newStatus = isPaid ? 'unpaid' : 'paid'
+
+    Modal.confirm({
+      title: 'Xác nhận thay đổi trạng thái',
+      content: `Bạn có chắc muốn chuyển trạng thái đơn ${order.orderId} thành "${newStatus.toUpperCase()}"?`,
+      okText: 'Xác nhận',
+      cancelText: 'Hủy',
+      onOk: () => updateStatusMutation.mutate({ id: order._id, newStatus }),
+    })
   }
 
+  // --- 4. CẤU HÌNH CỘT BẢNG ---
   const columns = [
-    { title: 'Mã đơn', dataIndex: 'orderId', key: 'orderId', render: (v) => v || '-' },
-    { title: 'Bàn', dataIndex: 'tableName', key: 'tableName' },
-    { title: 'Khách hàng', dataIndex: 'customer', key: 'customer', render: (v) => v || '-' },
-    { title: 'Nhân viên', dataIndex: 'servedByName', key: 'servedByName', render: (_, r) => r.servedByName || r.servedBy || '-' },
-    { title: 'Thời gian', dataIndex: 'created_at', key: 'created_at', render: (v) => v ? new Date(v).toLocaleTimeString() + ' ' + new Date(v).toLocaleDateString() : '-' },
-    { title: 'Trạng thái', dataIndex: 'status', key: 'status' },
-    { title: 'Tổng (₫)', dataIndex: 'total', key: 'total', align: 'right', render: v => (v || 0).toLocaleString('vi-VN') },
     {
-      title: () => <div style={{ textAlign: 'center' }}>Hành động</div>,
+      title: 'Mã đơn',
+      dataIndex: 'orderId',
+      width: 100,
+      render: (text) => (
+        <Text strong copyable>
+          {text}
+        </Text>
+      ),
+    },
+    {
+      title: 'Thông tin',
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          <Text strong>{record.tableName}</Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            Khách: {record.customerName}
+          </Text>
+        </Space>
+      ),
+    },
+    {
+      title: 'Thời gian',
+      dataIndex: 'createdAt',
+      width: 160,
+      render: (date) => (
+        <div style={{ fontSize: 13 }}>
+          <div>{dayjs(date).format('HH:mm')}</div>
+          <div style={{ color: '#888' }}>{dayjs(date).format('DD/MM/YYYY')}</div>
+        </div>
+      ),
+    },
+    {
+      title: 'Tổng tiền',
+      dataIndex: 'totalAmount',
+      align: 'right',
+      render: (amount) => (
+        <Text type="danger" strong>
+          {formatCurrency(amount)}
+        </Text>
+      ),
+    },
+    {
+      title: 'Trạng thái',
+      dataIndex: 'status',
+      align: 'center',
+      width: 150,
+      render: (status) => {
+        const config = STATUS_MAP[status] || STATUS_MAP.default
+        return <Tag color={config.color}>{config.label}</Tag>
+      },
+    },
+    {
+      title: 'Hành động',
       key: 'action',
       align: 'center',
+      width: 100,
       render: (_, record) => (
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
+        <Tooltip title="Xem chi tiết">
           <Button
-            size="small"
-            onClick={() => openDetail(record)} // Gọi hàm fetch chi tiết
-            icon={<EyeOutlined />}
-            loading={selectedOrder?._id === record._id && loadingDetail}
-            style={{
-              borderRadius: 8,
-              background: '#fff',
-              border: '1px solid #f0f0f0',
-              padding: 6,
-              height: 36,
-              width: 36,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
+            type="text"
+            shape="circle"
+            icon={<EyeOutlined style={{ color: '#1890ff' }} />}
+            onClick={() => {
+              setSelectedOrder(record)
+              setDetailOpen(true)
             }}
           />
-        </div>
-      )
+        </Tooltip>
+      ),
     },
   ]
 
-  const tablesForSelect = useMemo(() => Object.values(tableNamesMap), [tableNamesMap])
-
   return (
-    <>
-      <section className="mb-3">
-        <h1 className="font-bold text-2xl mb-2">Quản lý thanh toán & hóa đơn</h1>
-        <Breadcrumb items={[{ title: 'Trang chủ' }, { title: 'Quản lý thanh toán' }]} />
-      </section>
-
-      <Card>
-        <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <div>Chọn bàn:</div>
-            {loadingOrders ? (
-              <Spin />
-            ) : (
-              <Select
-                style={{ width: 260 }}
-                placeholder="Chọn bàn..."
-                value={selectedTable}
-                onChange={onTableChange}
-                allowClear
-              >
-                {tablesForSelect.map(t => (
-                  <Option key={t.id} value={t.id}>{t.name}</Option>
-                ))}
-              </Select>
-            )}
-          </div>
-
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <ShearchPayment onSearch={handleSearch} style={{ width: 360 }} />
-            <FilterPayment value={statusFilter} onChange={handleFilterStatus} style={{ minWidth: 220 }} />
-          </div>
+    <div style={{ padding: 24 }}>
+      {/* --- HEADER & BREADCRUMB --- */}
+      <div style={{ marginBottom: 24 }}>
+        <Breadcrumb items={[{ title: 'Admin' }, { title: 'Quản lý Hóa đơn' }]} />
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginTop: 8,
+          }}
+        >
+          <Title level={3} style={{ margin: 0 }}>
+            Lịch sử giao dịch
+          </Title>
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={() => queryClient.invalidateQueries(['invoices'])}
+            loading={isFetching}
+          >
+            Làm mới
+          </Button>
         </div>
+      </div>
 
+      {/* --- FILTER BAR --- */}
+      <Card bodyStyle={{ padding: 16 }} style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <Input
+            placeholder="Tìm theo mã đơn, tên khách..."
+            prefix={<SearchOutlined />}
+            style={{ width: 300 }}
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            allowClear
+          />
+
+          <Select
+            placeholder="Lọc theo bàn"
+            style={{ width: 200 }}
+            allowClear
+            onChange={setSelectedTable}
+            value={selectedTable}
+          >
+            {tableOptions.map((t) => (
+              <Option key={t.id} value={t.id}>
+                {t.name}
+              </Option>
+            ))}
+          </Select>
+
+          <Select
+            placeholder="Trạng thái"
+            style={{ width: 200 }}
+            allowClear
+            onChange={setStatusFilter}
+            value={statusFilter}
+            suffixIcon={<FilterOutlined />}
+          >
+            <Option value="paid">
+              <Tag color="success">Đã thanh toán</Tag>
+            </Option>
+            <Option value="unpaid">
+              <Tag color="error">Chưa thanh toán</Tag>
+            </Option>
+            <Option value="pending payment">
+              <Tag color="warning">Chờ thanh toán</Tag>
+            </Option>
+          </Select>
+        </div>
+      </Card>
+
+      {/* --- DATA TABLE --- */}
+      <Card bodyStyle={{ padding: 0 }} bordered={false} className="shadow-sm">
         <Table
           columns={columns}
-          dataSource={orders}
-          loading={loadingOrders || loadingDetail}
-          rowKey={r => r._id || r.key || r.order_id}
-          pagination={{ pageSize: 10 }}
+          dataSource={processedData}
+          loading={isLoading}
+          rowKey="key"
+          pagination={{
+            pageSize: 10,
+            showTotal: (total) => `Tổng cộng ${total} hóa đơn`,
+            position: ['bottomRight'],
+          }}
         />
       </Card>
 
+      {/* --- DETAIL MODAL --- */}
       <Modal
         open={detailOpen}
-        title={selectedOrder ? `Hoá đơn ${selectedOrder.orderId || selectedOrder._id}` : 'Hoá đơn'}
+        title={
+          <Space>
+            <DollarOutlined />
+            <span>Chi tiết hóa đơn: {selectedOrder?.orderId}</span>
+            {selectedOrder && (
+              <Tag color={STATUS_MAP[selectedOrder.status]?.color || 'default'}>
+                {STATUS_MAP[selectedOrder.status]?.label}
+              </Tag>
+            )}
+          </Space>
+        }
         footer={null}
-        onCancel={() => { setDetailOpen(false); setSelectedOrder(null) }}
+        onCancel={() => setDetailOpen(false)}
         width={800}
+        destroyOnClose
       >
         <PaymentDetail
           order={selectedOrder}
-          onClose={() => { setDetailOpen(false); setSelectedOrder(null) }}
-          onMarkPaid={(o) => markPaid(o || selectedOrder)}
+          onClose={() => setDetailOpen(false)}
+          onMarkPaid={() => handleMarkPaid(selectedOrder)}
+          isUpdating={updateStatusMutation.isPending}
         />
       </Modal>
-    </>
+    </div>
   )
 }
 

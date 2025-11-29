@@ -1,13 +1,13 @@
 import React, { useMemo } from 'react'
-import { Modal, List, Spin, Alert } from 'antd'
+import { Modal, List, Spin, Alert, Button, Empty, Tag } from 'antd'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate, useLocation } from 'react-router' // Thêm useLocation
-import { Receipt, ChevronRight } from 'lucide-react'
+import { useNavigate, useLocation } from 'react-router'
+import { Receipt, ChevronRight, RefreshCw } from 'lucide-react'
 import invoiceAPI from '@/apis/invoice/invoice.api'
+import { jwtDecode } from 'jwt-decode' // <--- Nhớ import cái này
 
 const formatVnd = (n) => (n || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + 'đ'
 
-// Hàm lấy ID an toàn
 const getSafeIdString = (field) => {
   if (!field) return null
   if (typeof field === 'object' && field._id) return String(field._id)
@@ -17,35 +17,49 @@ const getSafeIdString = (field) => {
 
 const OrderHistoryModal = ({ isOpen, onClose }) => {
   const navigate = useNavigate()
-  const location = useLocation() // Hook để lấy URL hiện tại
+  const location = useLocation()
 
-  // 1. Lấy userId từ localStorage
+  // 1. LẤY USER ID TỪ TOKEN (Logic chuẩn)
   const userId = useMemo(() => {
     try {
-      const userString = localStorage.getItem('user')
-      const id = userString ? JSON.parse(userString)._id : null
-      return id ? String(id) : null
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+      if (token) {
+        const decoded = jwtDecode(token)
+        // Lấy ID từ payload token (thường là _id hoặc id)
+        return decoded._id || decoded.id || decoded.sub
+      }
     } catch (e) {
-      return null
+      console.error('Lỗi decode token:', e)
     }
+    return null
   }, [])
 
+  // 2. Lấy Table ID (cho khách vãng lai)
   const tableId = useMemo(() => {
+    // Ưu tiên lấy từ localStorage trước cho chuẩn
+    const localTableId = localStorage.getItem('currentTableId')
+    if (localTableId) return localTableId
+
+    // Fallback: Lấy từ URL
     const params = new URLSearchParams(location.search)
-    return params.get('table_id') || 'unknown_table'
+    return params.get('table_id')
   }, [location.search])
 
   const {
     data: completedInvoices = [],
     isLoading,
     isError,
-    error,
+    refetch,
+    isRefetching,
   } = useQuery({
-    queryKey: ['invoices', userId, tableId, 'history_realtime'],
+    queryKey: ['invoices', userId, tableId, 'history_token_mode'],
 
     queryFn: async () => {
-      if (!userId) return []
+      console.log('🚀 Tải lịch sử...')
+      console.log('- User ID (Token):', userId)
+      console.log('- Table ID:', tableId)
 
+      // Gọi API lấy tất cả hóa đơn đã hoàn thành
       const res = await invoiceAPI.getAll({ status: 'completed' })
 
       let data = []
@@ -53,57 +67,72 @@ const OrderHistoryModal = ({ isOpen, onClose }) => {
       else if (res && Array.isArray(res.data)) data = res.data
       else if (res && Array.isArray(res)) data = res
 
-      // Lọc Client-side (Logic chuẩn)
+      // --- LOGIC LỌC THÔNG MINH ---
       const myInvoices = data.filter((invoice) => {
+        // 1. Check chủ sở hữu (User ID)
         const invoiceOwnerId =
-          getSafeIdString(invoice.user_id) ||
-          getSafeIdString(invoice.account_id) ||
-          getSafeIdString(invoice.userId)
+          getSafeIdString(invoice.user_id) || getSafeIdString(invoice.account_id)
 
         let orderOwnerId = null
         if (Array.isArray(invoice.order_id) && invoice.order_id.length > 0) {
-          orderOwnerId = getSafeIdString(invoice.order_id[0].user_id)
+          orderOwnerId = getSafeIdString(invoice.order_id[0]?.user_id)
         } else if (invoice.order_id) {
           orderOwnerId = getSafeIdString(invoice.order_id.user_id)
         }
 
-        return invoiceOwnerId === userId || orderOwnerId === userId
+        if (userId && (invoiceOwnerId === userId || orderOwnerId === userId)) {
+          return true
+        }
+
+        // 2. Check theo bàn (Nếu không có User hoặc User không khớp)
+        // Dùng cho khách vãng lai ngồi đúng cái bàn đó
+        const invTableId = getSafeIdString(invoice.table_id)
+        let orderTableId = null
+        if (Array.isArray(invoice.order_id) && invoice.order_id.length > 0) {
+          orderTableId = getSafeIdString(invoice.order_id[0]?.table_id)
+        }
+
+        if (tableId && (invTableId === tableId || orderTableId === tableId)) {
+          return true
+        }
+
+        return false
       })
 
+      console.log(`✅ Tìm thấy ${myInvoices.length} hóa đơn.`)
       return myInvoices.reverse()
     },
-    enabled: isOpen && !!userId,
-    staleTime: 0, // QUAN TRỌNG: Luôn coi dữ liệu là cũ, bắt buộc tải mới mỗi khi mở Modal
-    gcTime: 0, // (Hoặc cacheTime cũ) Không lưu cache khi đóng modal
-    refetchOnWindowFocus: true, // Tự tải lại khi quay lại tab
+    // Luôn cho phép chạy khi mở modal (kể cả không có user, ta sẽ lọc theo bàn)
+    enabled: isOpen,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnWindowFocus: true,
   })
+
   const openOrderDetail = (invoice) => {
     onClose()
     navigate(`/flareon/invoices/${invoice._id}`)
   }
 
   const renderContent = () => {
-    if (isLoading) {
+    if (isLoading && !isRefetching && completedInvoices.length === 0) {
       return (
-        <div className="flex justify-center items-center h-48">
-          <Spin size="large" />
+        <div className="flex justify-center p-10">
+          <Spin tip="Đang tải..." />
         </div>
       )
     }
 
-    if (isError) {
-      return (
-        <div className="flex justify-center p-4">
-          <Alert message="Lỗi tải dữ liệu" type="error" showIcon />
-        </div>
-      )
-    }
+    if (isError) return <div className="p-4 text-center text-red-500">Lỗi tải dữ liệu</div>
 
-    if (!completedInvoices || completedInvoices.length === 0) {
+    if (completedInvoices.length === 0) {
       return (
-        <div className="flex justify-center items-center h-48 flex-col gap-2">
-          <Receipt className="w-12 h-12 text-gray-300" />
-          <p className="text-gray-500">Bạn chưa có hóa đơn nào.</p>
+        <div className="flex flex-col items-center justify-center h-48 gap-4 text-gray-400">
+          <Receipt size={48} strokeWidth={1} />
+          <span>Chưa có hóa đơn nào tại đây</span>
+          <Button icon={<RefreshCw size={14} />} onClick={() => refetch()}>
+            Tải lại
+          </Button>
         </div>
       )
     }
@@ -112,46 +141,38 @@ const OrderHistoryModal = ({ isOpen, onClose }) => {
       <List
         dataSource={completedInvoices}
         renderItem={(invoice) => {
-          let tableName = 'Mang về / Khác'
-          let order = null
-          if (Array.isArray(invoice.order_id) && invoice.order_id.length > 0)
-            order = invoice.order_id[0]
-          else if (invoice.order_id) order = invoice.order_id
-
-          if (order?.table_id?.name) tableName = order.table_id.name
-          else if (invoice.table_id?.name) tableName = invoice.table_id.name
-
-          const date = new Date(invoice.createdAt || Date.now()).toLocaleDateString('vi-VN')
+          const date = new Date(invoice.createdAt || Date.now()).toLocaleDateString('vi-VN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            day: '2-digit',
+            month: '2-digit',
+          })
 
           return (
             <List.Item
               onClick={() => openOrderDetail(invoice)}
-              className="!p-4 hover:!bg-gray-50 !cursor-pointer border-b border-gray-100 last:border-0 transition-colors group"
-              actions={[
-                <ChevronRight
-                  key="arrow"
-                  className="text-gray-400 w-5 h-5 group-hover:text-orange-500 transition-colors"
-                />,
-              ]}
+              className="!px-4 !py-3 hover:bg-gray-50 cursor-pointer transition-colors border-b last:border-0"
             >
-              <List.Item.Meta
-                avatar={
-                  <div className="bg-orange-50 p-2 rounded-full group-hover:bg-orange-100 transition-colors">
-                    <Receipt className="w-5 h-5 text-orange-600" />
+              <div className="flex items-center justify-between w-full">
+                <div className="flex items-center gap-3">
+                  <div className="bg-green-50 p-2 rounded-full">
+                    <Receipt className="w-5 h-5 text-green-600" />
                   </div>
-                }
-                title={
-                  <span className="font-semibold text-gray-800">{`Hóa đơn tại ${tableName}`}</span>
-                }
-                description={
-                  <div className="flex flex-col mt-1 gap-1">
-                    <span className="text-xs text-gray-500">{date}</span>
-                    <span className="font-bold text-orange-600 text-sm">
-                      {formatVnd(invoice.total_amount)}
-                    </span>
+                  <div>
+                    <div className="font-semibold text-gray-800">
+                      Hóa đơn #{invoice._id.slice(-6).toUpperCase()}
+                    </div>
+                    <div className="text-xs text-gray-500">{date}</div>
                   </div>
-                }
-              />
+                </div>
+
+                <div className="text-right">
+                  <div className="font-bold text-orange-600">{formatVnd(invoice.total_amount)}</div>
+                  <Tag color="success" className="mr-0 mt-1 text-[10px]">
+                    Thành công
+                  </Tag>
+                </div>
+              </div>
             </List.Item>
           )
         }}
@@ -161,16 +182,26 @@ const OrderHistoryModal = ({ isOpen, onClose }) => {
 
   return (
     <Modal
-      title={<span className="text-lg font-bold">🧾 Lịch sử hóa đơn</span>}
+      title={
+        <div className="flex justify-between items-center pr-8">
+          <span className="text-lg font-bold">Lịch sử hóa đơn</span>
+          <Button
+            type="text"
+            icon={<RefreshCw size={18} />}
+            onClick={() => refetch()}
+            loading={isRefetching}
+          />
+        </div>
+      }
       open={isOpen}
       onCancel={onClose}
       footer={null}
-      width={600}
       centered
-      className="rounded-lg overflow-hidden"
+      width={600}
     >
-      <div className="max-h-[60vh] overflow-y-auto mt-4 custom-scrollbar">{renderContent()}</div>
+      <div className="max-h-[60vh] overflow-y-auto custom-scrollbar -mx-6">{renderContent()}</div>
     </Modal>
   )
 }
+
 export default OrderHistoryModal
