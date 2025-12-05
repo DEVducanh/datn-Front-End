@@ -17,4 +17,18 @@ export default defineConfig({
       '@shared': path.resolve(__dirname, 'src/shared'),
     },
   },
+  // --- PHẦN THÊM MỚI Ở DƯỚI ĐÂY ---
+  build: {
+    chunkSizeWarningLimit: 2000, // Tăng giới hạn cảnh báo lên 2MB
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          // Tách các thư viện trong node_modules ra thành file riêng tên là vendor
+          if (id.includes('node_modules')) {
+            return 'vendor'
+          }
+        },
+      },
+    },
+  },
 })
