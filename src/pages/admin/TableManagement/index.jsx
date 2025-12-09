@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
-import { Card, Breadcrumb, Form } from 'antd'
+import { Card, Breadcrumb, Form, Modal, message } from 'antd' // Thêm Modal, message
 import { PlusCircleOutlined } from '@ant-design/icons'
 import AntButton from '@/components/AntButton'
 import TableTable from './TableTable'
@@ -18,26 +18,29 @@ const TableManagement = () => {
   const [form] = Form.useForm()
   const queryClient = useQueryClient()
 
-  // State cho modal tạo/sửa bàn
+  // State modal
   const [isOpenModal, setIsOpenModal] = useState(false)
   const [editingRow, setEditingRow] = useState(null)
   const [deletingId, setDeletingId] = useState(null)
 
-  // --- STATE CHO MODAL XEM ĐƠN ---
+  // State xem đơn
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false)
-  const [selectedTable, setSelectedTable] = useState(null) // Lưu bàn đang được xem
+  const [selectedTable, setSelectedTable] = useState(null)
 
-  // API lấy danh sách bàn
+  // API lấy danh sách bàn (CÓ AUTO REFRESH)
   const { data: tables = [], isLoading } = useQuery({
     queryKey: tableKeys.list(),
     queryFn: async () => {
       const res = await tableAPI.getAll()
       return res.data || []
     },
+    // --- SỬA Ở ĐÂY: Thêm dòng này để tự động cập nhật mỗi 5 giây ---
+    refetchInterval: 5000,
+    // -----------------------------------------------------------------
     onError: () => toast.error('Lỗi tải danh sách bàn!'),
   })
 
-  // ... (Các mutation Create/Update/Delete giữ nguyên như cũ của bạn) ...
+  // ... (Các mutation Create/Update/Delete giữ nguyên) ...
   const createMutation = useMutation({
     mutationFn: (payload) => tableAPI.create(payload),
     onSuccess: () => {
@@ -62,7 +65,7 @@ const TableManagement = () => {
     },
   })
 
-  // Các hàm xử lý
+  // Các hàm xử lý (Giữ nguyên)
   const openCreate = () => {
     setEditingRow(null)
     form.resetFields()
@@ -90,9 +93,7 @@ const TableManagement = () => {
     } catch {}
   }
 
-  // --- HÀM MỞ MODAL XEM ĐƠN ---
   const handleViewOrder = (tableRecord) => {
-    console.log('Xem đơn của bàn:', tableRecord)
     setSelectedTable(tableRecord)
     setIsOrderModalOpen(true)
   }
@@ -117,7 +118,6 @@ const TableManagement = () => {
           onEdit={openEdit}
           onRemove={handleRemove}
           deletingId={deletingId}
-          // Truyền hàm xuống dưới
           onViewOrder={handleViewOrder}
         />
       </Card>
@@ -132,7 +132,7 @@ const TableManagement = () => {
         onCancel={closeModal}
       />
 
-      {/* --- MODAL XEM ĐƠN HÀNG --- */}
+      {/* Modal Xem Đơn */}
       <OrderDetailModal
         open={isOrderModalOpen}
         onCancel={() => setIsOrderModalOpen(false)}
