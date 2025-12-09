@@ -6,19 +6,35 @@ import http from '@/apis/http'
 const formatVnd = (n) => (n || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + 'đ'
 
 const OrderDetailModal = ({ open, onCancel, tableId, tableName }) => {
-  // 1. GỌI API LẤY THÔNG TIN ĐƠN HÀNG
+
+  // 1. GỌI API LẤY THÔNG TIN ĐƠN HÀNG (SỬA LẠI ĐỂ KHÔNG BỊ LỖI 404)
   const { data: activeOrder, isLoading: isLoadingOrder } = useQuery({
     queryKey: ['currentOrderInfo', tableId],
     queryFn: async () => {
       if (!tableId) return null
-      const res = await http.get(`/orders/by-table/${tableId}`)
 
-      let data = res.data || res
-      // Tìm đơn hàng đang hoạt động
-      if (Array.isArray(data)) {
-        return data.find((o) => !['Completed', 'Cancelled', 'Paid'].includes(o.status)) || null
+      try {
+        // --- SỬA Ở ĐÂY: Thay vì gọi /by-table, ta gọi lấy tất cả ---
+        const res = await http.get(`/orders`)
+
+        let allOrders = res.data?.data || res.data || res
+        if (!Array.isArray(allOrders)) allOrders = []
+
+        // --- TỰ LỌC Ở FRONTEND ---
+        // Tìm đơn hàng: (Đúng bàn này) VÀ (Chưa kết thúc)
+        const foundOrder = allOrders.find((o) => {
+          const tId = o.table_id?._id || o.table_id
+          const isSameTable = tId === tableId
+          // Các trạng thái được coi là "đang hoạt động"
+          const isActive = !['Completed', 'Cancelled', 'Paid'].includes(o.status)
+          return isSameTable && isActive
+        })
+
+        return foundOrder || null
+      } catch (error) {
+        console.error("Lỗi lấy đơn hàng:", error)
+        return null
       }
-      return data
     },
     enabled: !!tableId && open,
   })
@@ -27,25 +43,18 @@ const OrderDetailModal = ({ open, onCancel, tableId, tableName }) => {
   // Lấy user_id (có thể là string hoặc object)
   const userIdRaw = activeOrder?.user_id || activeOrder?.user
 
-  // 2. GỌI API LẤY THÔNG TIN USER (NẾU user_id LÀ CHUỖI)
+  // 2. GỌI API LẤY THÔNG TIN USER (NẾU CẦN THIẾT)
   const { data: userInfo } = useQuery({
     queryKey: ['userInfo', userIdRaw],
     queryFn: async () => {
-      // Nếu userIdRaw là object (đã populate) hoặc không tồn tại -> bỏ qua
       if (!userIdRaw || typeof userIdRaw === 'object') return null
-
-      // Nếu là string ID, gọi API lấy chi tiết user
       try {
-        console.log('Đang lấy thông tin khách hàng ID:', userIdRaw)
-        // Giả sử API lấy user là /users/:id
         const res = await http.get(`/users/${userIdRaw}`)
         return res.data || res
       } catch (e) {
-        console.error('Lỗi lấy tên khách:', e)
         return null
       }
     },
-    // Chỉ chạy khi userIdRaw là một chuỗi ID
     enabled: !!userIdRaw && typeof userIdRaw === 'string' && open,
   })
 
@@ -54,46 +63,48 @@ const OrderDetailModal = ({ open, onCancel, tableId, tableName }) => {
     queryKey: ['currentOrderItems', activeOrderId],
     queryFn: async () => {
       if (!activeOrderId) return []
-      const res = await http.get(`/order-item/order/${activeOrderId}`)
-
-      if (Array.isArray(res?.Orderitems)) return res.Orderitems
-      if (Array.isArray(res?.data?.Orderitems)) return res.data.Orderitems
-      if (Array.isArray(res?.data)) return res.data
-      if (Array.isArray(res)) return res
-
-      return []
+      try {
+        const res = await http.get(`/order-item/order/${activeOrderId}`)
+        if (Array.isArray(res?.Orderitems)) return res.Orderitems
+        if (Array.isArray(res?.data?.Orderitems)) return res.data.Orderitems
+        if (Array.isArray(res?.data)) return res.data
+        if (Array.isArray(res)) return res
+        return []
+      } catch (e) {
+        return []
+      }
     },
     enabled: !!activeOrderId && open,
   })
 
-  // --- HÀM TÍNH TOÁN TÊN KHÁCH HÀNG ---
+  // --- HÀM HIỂN THỊ TÊN KHÁCH ---
   const displayCustomerName = () => {
-    // 1. Nếu có data từ API user vừa gọi
     if (userInfo?.username) return userInfo.username
     if (userInfo?.name) return userInfo.name
-    if (userInfo?.email) return userInfo.email
 
-    // 2. Nếu activeOrder đã có sẵn object user (backend populate sẵn)
     if (typeof userIdRaw === 'object' && userIdRaw !== null) {
       return userIdRaw.username || userIdRaw.name || userIdRaw.email || 'Khách hàng'
     }
 
+    // Nếu activeOrder có lưu tên khách vãng lai (customer_name)
+    if (activeOrder?.customer_name) return activeOrder.customer_name
+
     return 'Vãng lai (Khách lẻ)'
   }
-  // -------------------------------------
 
   const columns = [
     {
       title: 'Tên món',
       dataIndex: 'dish_id',
       key: 'name',
-      render: (dish, record) => dish?.dish_name || record.dish_name || 'Món không xác định',
+      render: (dish, record) => dish?.dish_name || record.dish_name || record.name || 'Món ăn',
     },
     {
       title: 'SL',
       dataIndex: 'quantity',
       key: 'quantity',
       align: 'center',
+      render: (q) => <span className="font-bold">x{q}</span>
     },
     {
       title: 'Giá',
@@ -109,17 +120,24 @@ const OrderDetailModal = ({ open, onCancel, tableId, tableName }) => {
       render: (_, r) => formatVnd((r.price || 0) * (r.quantity || 0)),
     },
     {
-      title: 'TT Món',
+      title: 'Trạng thái',
       dataIndex: 'status',
       key: 'status',
       align: 'center',
       render: (s) => {
         let color = 'default'
-        if (s === 'Served') color = 'green'
+        if (s === 'Served' || s === 'Ready') color = 'green'
         if (s === 'Processing') color = 'blue'
         if (s === 'Pending') color = 'gold'
         if (s === 'Cancelled') color = 'red'
-        return <Tag color={color}>{s}</Tag>
+
+        let text = s
+        if (s === 'Served') text = 'Đã phục vụ'
+        if (s === 'Ready') text = 'Đã xong'
+        if (s === 'Processing') text = 'Đang nấu'
+        if (s === 'Pending') text = 'Chờ nấu'
+
+        return <Tag color={color}>{text || s}</Tag>
       },
     },
   ]
@@ -128,31 +146,36 @@ const OrderDetailModal = ({ open, onCancel, tableId, tableName }) => {
 
   return (
     <Modal
-      title={`Đơn hàng tại: ${tableName}`}
+      title={<span className="text-lg">Chi tiết bàn: <b>{tableName}</b></span>}
       open={open}
       onCancel={onCancel}
       footer={<Button onClick={onCancel}>Đóng</Button>}
       width={800}
+      centered
     >
       {isLoading ? (
-        <div className="flex justify-center p-8">
-          <Spin tip="Đang tải dữ liệu..." />
+        <div className="flex justify-center p-10">
+          <Spin size="large" tip="Đang tải dữ liệu..." />
         </div>
       ) : !activeOrder ? (
-        <div className="text-center p-8 text-gray-500">
-          Bàn này chưa có đơn hàng nào đang hoạt động.
+        <div className="flex flex-col items-center justify-center h-40 text-gray-400 bg-gray-50 rounded-lg">
+          <p className="text-lg">Bàn này đang trống</p>
+          <span className="text-sm">(Chưa có đơn hàng nào đang hoạt động)</span>
         </div>
       ) : (
         <>
-          <div className="mb-4 flex justify-between bg-gray-50 p-3 rounded border">
-            {/* HIỂN THỊ TÊN KHÁCH HÀNG */}
-            <span className="text-base">
-              Khách: <strong>{displayCustomerName()}</strong>
-            </span>
+          <div className="mb-4 flex justify-between items-center bg-blue-50 p-4 rounded-lg border border-blue-100">
+            <div className="flex flex-col">
+              <span className="text-gray-500 text-xs uppercase font-bold">Khách hàng</span>
+              <span className="text-lg font-bold text-blue-700">{displayCustomerName()}</span>
+            </div>
 
-            <Tag color="blue" className="font-bold text-sm uppercase">
-              {activeOrder?.status}
-            </Tag>
+            <div className="text-right">
+              <span className="text-gray-500 text-xs uppercase font-bold block mb-1">Trạng thái đơn</span>
+              <Tag color="processing" className="m-0 text-sm py-1 px-3">
+                {activeOrder?.status || 'ĐANG PHỤC VỤ'}
+              </Tag>
+            </div>
           </div>
 
           <Table
@@ -160,13 +183,17 @@ const OrderDetailModal = ({ open, onCancel, tableId, tableName }) => {
             columns={columns}
             rowKey={(r) => r._id || Math.random()}
             pagination={false}
-            size="middle"
+            size="small"
             bordered
-            locale={{ emptyText: 'Không tìm thấy món ăn trong đơn hàng này' }}
+            locale={{ emptyText: 'Chưa gọi món nào' }}
+            scroll={{ y: 300 }}
           />
 
-          <div className="mt-4 text-right text-2xl font-bold text-red-600">
-            Tổng tiền: {formatVnd(activeOrder?.total_price)}
+          <div className="mt-4 pt-4 border-t flex justify-end items-center gap-4">
+            <span className="text-gray-600 font-medium">Tạm tính:</span>
+            <span className="text-2xl font-bold text-red-600">
+              {formatVnd(activeOrder?.total_price || 0)}
+            </span>
           </div>
         </>
       )}
@@ -174,4 +201,4 @@ const OrderDetailModal = ({ open, onCancel, tableId, tableName }) => {
   )
 }
 
-export default OrderDetailModal
+export default OrderDetailModal 

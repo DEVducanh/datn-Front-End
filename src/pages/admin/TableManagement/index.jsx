@@ -88,9 +88,23 @@ const TableManagement = () => {
   const handleOk = async () => {
     try {
       const values = await form.validateFields()
-      if (editingRow) updateMutation.mutate({ id: editingRow._id, payload: values })
-      else createMutation.mutate(values)
-    } catch {}
+
+      // --- SỬA ĐOẠN NÀY ---
+      // Tạo payload đầy đủ giống hệt Swagger
+      const payload = {
+        ...values,
+        capacity: Number(values.capacity), // Đảm bảo là số
+        // Tự động sinh mã QR (Ví dụ: QR-TenBan) vì form không nhập
+        qr_code: values.qr_code || `QR-${values.table_name}-${Date.now()}`,
+        status: values.status // Lúc này đã là "available" nhờ bạn sửa bên Modal rồi
+      };
+      // --------------------
+
+      if (editingRow) updateMutation.mutate({ id: editingRow._id, payload })
+      else createMutation.mutate(payload)
+    } catch (e) {
+      console.error("Lỗi validate form:", e);
+    }
   }
 
   const handleViewOrder = (tableRecord) => {

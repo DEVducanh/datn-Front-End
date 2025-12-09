@@ -65,7 +65,7 @@ const TableFormModal = ({ open, title, submitting, form, onOk, onCancel }) => {
         >
           <Select
             options={[
-              { value: "empty", label: 'Còn trống' },
+              { value: "available", label: 'Còn trống' },
               { value: "occupied", label: 'Đã đặt' },
               { value: "reserved", label: 'Đang sử dụng' },
               { value: "maintenance", label: 'Bảo trì' },

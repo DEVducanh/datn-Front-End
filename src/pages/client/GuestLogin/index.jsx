@@ -1,121 +1,136 @@
-import React, { useEffect } from 'react'
-import { Button, Input, Form, Typography, message } from 'antd'
-import { UserOutlined, PhoneOutlined, QrcodeOutlined } from '@ant-design/icons'
-import { useMutation } from '@tanstack/react-query'
-import { useNavigate, useLocation } from 'react-router-dom'
-import authAPI from '@/apis/auth/auth.api'
-import { useAuth } from '@/contexts/AuthContext' // <--- 1. Import cái này
-
-const { Title, Text } = Typography
-const FLAREON_LOGO = '/public/images/Logo.png'
+import React, { useEffect, useState } from 'react'
+import { Form, Input, Button, Card, message, Spin, Alert } from 'antd'
+import { UserOutlined, PhoneOutlined, EnvironmentOutlined, QrcodeOutlined } from '@ant-design/icons'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { useAuth } from '@/contexts/AuthContext'
+import http from '@/apis/http'
 
 const GuestLogin = () => {
   const navigate = useNavigate()
-  const location = useLocation()
-  const [form] = Form.useForm()
-
-  // 2. Lấy hàm login từ Context ra để cập nhật trạng thái ứng dụng
+  const [searchParams] = useSearchParams()
   const { login } = useAuth()
 
-  const getTableIdFromUrl = () => {
-    const searchParams = new URLSearchParams(location.search)
-    return searchParams.get('table_id')
-  }
+  // Lấy ID từ URL
+  const tableId = searchParams.get('table_id')
 
-  const tableId = getTableIdFromUrl()
+  // --- LOGIC MỚI: GỌI API LẤY TẤT CẢ BÀN VÀ TỰ LỌC ---
+  const { data: foundTable, isLoading, isError } = useQuery({
+    queryKey: ['guest-all-tables', tableId],
+    queryFn: async () => {
+      if (!tableId) throw new Error("No ID");
+      try {
+        // Gọi API lấy danh sách tất cả bàn (API này chắc chắn chạy được)
+        const res = await http.get(`/tables`)
 
-  useEffect(() => {
-    if (tableId) {
-      form.setFieldsValue({ table_id: tableId })
-    }
-  }, [tableId, form])
+        // Lấy mảng dữ liệu (tùy backend trả về dạng nào)
+        const listTables = res.data?.data || res.data || res || [];
 
-  const loginMutation = useMutation({
-    mutationFn: (payload) => authAPI.guestLogin(payload),
+        if (!Array.isArray(listTables)) {
+          console.error("API không trả về mảng:", res);
+          return null;
+        }
 
-    onSuccess: (response) => {
-      console.log("Guest API Response:", response);
+        // Tìm bàn có ID trùng khớp
+        const target = listTables.find(t => t._id === tableId);
 
-      const newToken = response.token || response.accessToken;
-      const userData = response.data || response.user;
+        if (!target) throw new Error("Không tìm thấy bàn trong danh sách");
 
-      if (newToken && userData) {
-        // --- SỬA ĐOẠN NÀY ---
-        // Thay vì chỉ set localStorage thủ công, hãy dùng hàm login của Context
-        // Hàm này sẽ vừa lưu localStorage, vừa cập nhật State cho cả trang web biết
-
-        login(newToken, userData);
-
-        // Lưu thêm user_info (nếu hàm login của bạn không tự lưu cái này)
-        localStorage.setItem('user_info', JSON.stringify(userData));
-
-        message.success(`Cập nhật thông tin thành công! Xin chào ${userData.username || userData.name}`)
-
-        navigate('/')
-      } else {
-        message.error("Lỗi: Không nhận được Token hoặc Dữ liệu từ Server")
+        return target;
+      } catch (err) {
+        console.error("Lỗi tìm bàn:", err);
+        throw err;
       }
     },
-    onError: (error) => {
-      console.error("Login Error:", error);
-      const msg = error.response?.data?.message || 'Cập nhật thông tin thất bại!';
-      message.error(msg)
-    },
+    enabled: !!tableId,
+    retry: 1
   })
 
-  const onFinish = (values) => {
-    loginMutation.mutate({
-      name: values.name,
-      phone: values.phone,
-      table_id: values.table_id
-    })
+  // --- XỬ LÝ HIỂN THỊ ---
+  const getTableDisplay = () => {
+    if (!tableId) return { text: 'Vui lòng quét mã QR', color: 'red', valid: false };
+    if (isLoading) return { text: 'Đang xác thực bàn...', color: 'blue', valid: false };
+    if (isError || !foundTable) return { text: 'Bàn không tồn tại!', color: 'red', valid: false };
+
+    // Lấy tên bàn
+    const name = foundTable.table_name || foundTable.name || 'Bàn ???';
+    return { text: name, color: 'green', valid: true };
+  }
+
+  const { text: tableNameDisplay, color: statusColor, valid: isValidTable } = getTableDisplay();
+
+  const onFinish = async (values) => {
+    if (!isValidTable) {
+      message.error('Bàn lỗi, không thể vào!');
+      return;
+    }
+    try {
+      const guestData = {
+        name: values.name,
+        phone: values.phone,
+        role: 'guest',
+        tableId: tableId,
+        tableName: tableNameDisplay
+      }
+
+      const mockToken = 'guest_token_' + Date.now();
+      login(mockToken, guestData, false);
+      localStorage.setItem('currentTableId', tableId);
+
+      message.success(`Xin chào ${values.name}!`);
+      navigate('/flareon')
+    } catch (error) {
+      message.error('Lỗi đăng nhập');
+    }
   }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 px-4">
-      <div className="w-full max-w-sm bg-white p-8 rounded-xl shadow-lg">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+      <Card className="w-full max-w-md shadow-xl rounded-2xl border-t-4 border-t-orange-500">
         <div className="text-center mb-8">
-          <img src={FLAREON_LOGO} alt="Logo" className="mx-auto h-20 mb-4 object-contain" />
-          <Title level={3} className="!text-orange-500 !m-0">Xin chào!</Title>
-          <Text type="secondary">Nhập thông tin để bắt đầu gọi món</Text>
+          <h1 className="text-3xl font-extrabold text-orange-600 m-0">Flareon</h1>
+          <p className="text-gray-400 text-sm mt-1">Hệ thống gọi món tại bàn</p>
         </div>
 
-        <Form form={form} layout="vertical" onFinish={onFinish} size="large">
-          <Form.Item
-            name="name"
-            rules={[{ required: true, message: 'Vui lòng nhập tên của bạn!' }]}
-          >
-            <Input prefix={<UserOutlined className="text-gray-400" />} placeholder="Tên của bạn" className="!rounded-lg" />
-          </Form.Item>
+        <Form name="guest_login" onFinish={onFinish} layout="vertical" size="large">
 
-          <Form.Item
-            name="phone"
-            rules={[
-              { required: true, message: 'Vui lòng nhập số điện thoại!' },
-              { pattern: /^[0-9]{10}$/, message: 'Số điện thoại không hợp lệ!' }
-            ]}
-          >
-            <Input prefix={<PhoneOutlined className="text-gray-400" />} placeholder="Số điện thoại" className="!rounded-lg" type="tel" />
-          </Form.Item>
-
-          <Form.Item name="table_id" rules={[{ required: true, message: 'Không tìm thấy mã bàn!' }]} hidden={!!tableId}>
-            <Input prefix={<QrcodeOutlined className="text-gray-400" />} placeholder="Mã bàn" className="!rounded-lg bg-gray-50" disabled={!!tableId} />
-          </Form.Item>
-
-          {tableId && (
-            <div className="text-center mb-6 p-2 bg-orange-50 rounded-lg border border-orange-100 text-orange-600 font-medium">
-              Bạn đang ngồi tại: <span className="font-bold">{tableId}</span>
+          {/* --- KHUNG HIỂN THỊ TÊN BÀN --- */}
+          <div className={`p-4 rounded-xl mb-6 text-center border-2 ${statusColor === 'green' ? 'bg-green-50 border-green-200' :
+              statusColor === 'red' ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-200'
+            }`}>
+            <p className="text-gray-500 text-xs uppercase tracking-wide mb-1 font-bold">Vị trí ngồi</p>
+            <div className={`text-xl font-bold flex items-center justify-center gap-2 ${statusColor === 'green' ? 'text-green-700' : statusColor === 'red' ? 'text-red-600' : 'text-blue-600'
+              }`}>
+              {isLoading ? <Spin size="small" /> : <EnvironmentOutlined />}
+              {tableNameDisplay}
             </div>
-          )}
+          </div>
 
-          <Form.Item className="mb-0">
-            <Button type="primary" htmlType="submit" block loading={loginMutation.isPending} className="!h-12 !rounded-lg !text-lg !font-bold !bg-orange-500 hover:!bg-orange-600 !border-none shadow-md shadow-orange-200">
-              Bắt đầu gọi món
+          <Form.Item name="name" rules={[{ required: true, message: 'Nhập tên' }]}>
+            <Input prefix={<UserOutlined />} placeholder="Tên của bạn" />
+          </Form.Item>
+
+          <Form.Item name="phone" rules={[{ required: true, message: 'Nhập SĐT' }]}>
+            <Input prefix={<PhoneOutlined />} placeholder="Số điện thoại" />
+          </Form.Item>
+
+          <Form.Item>
+            <Button
+              type="primary" htmlType="submit" block
+              className="bg-orange-600 hover:bg-orange-500 h-12 text-lg font-bold rounded-xl border-none"
+              disabled={!isValidTable || isLoading}
+            >
+              VÀO GỌI MÓN
             </Button>
           </Form.Item>
         </Form>
-      </div>
-      <p className="mt-8 text-gray-400 text-xs">Flareon Ordering System</p>
+
+        {!isValidTable && !isLoading && tableId && (
+          <div className="text-center mt-2">
+            <span className="text-xs text-red-400">ID: {tableId} (Không tìm thấy trong hệ thống)</span>
+          </div>
+        )}
+      </Card>
     </div>
   )
 }
