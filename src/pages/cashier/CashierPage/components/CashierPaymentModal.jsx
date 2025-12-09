@@ -1,74 +1,98 @@
 import React from 'react'
-import { Modal, Button, Descriptions, message, Tag } from 'antd'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Modal, Button, Descriptions, message, Tag, Table, Divider } from 'antd'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import http from '@/apis/http'
-import { DollarOutlined, CheckCircleOutlined } from '@ant-design/icons'
+import { DollarOutlined, CheckCircleOutlined, SolutionOutlined } from '@ant-design/icons'
 
 const formatVnd = (n) => (n || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + 'đ'
 
 const CashierPaymentModal = ({ isOpen, onClose, order }) => {
   const queryClient = useQueryClient()
 
-  // --- 3. BƯỚC CUỐI: Cập nhật đơn hàng thành PAID ---
+  // --- 1. LẤY CHI TIẾT MÓN ĂN (ĐÃ LỌC BỎ MÓN HỦY) ---
+  const { data: orderItems = [], isLoading } = useQuery({
+    queryKey: ['cashier-order-items', order?._id],
+    queryFn: async () => {
+      if (!order?._id) return []
+      const res = await http.get(`/order-item/order/${order._id}`)
+
+      let items = []
+      if (Array.isArray(res)) items = res
+      else if (res.data && Array.isArray(res.data)) items = res.data
+      else if (res.Orderitems) items = res.Orderitems
+
+      // --- LỌC BỎ MÓN HỦY ---
+      return items.filter((item) => item.status !== 'Cancelled')
+    },
+    enabled: !!order?._id && isOpen,
+  })
+
+  // --- 2. LOGIC THANH TOÁN (GIỮ NGUYÊN) ---
   const updateToPaidMutation = useMutation({
     mutationFn: async () => {
-      // Gọi API cập nhật trạng thái đơn hàng thành 'Paid'
       console.log('Đang cập nhật trạng thái sang Paid...')
       await http.patch(`/orders/${order._id}/status`, { status: 'Paid' })
+
+      // Update bàn thành trống
+      const tableId = order.table_id?._id || order.table_id
+      if (tableId && String(tableId).length === 24) {
+        try {
+          await http.patch(`/tables/${tableId}`, { status: 'empty' })
+        } catch (e) {}
+      }
     },
     onSuccess: () => {
-      message.success('Thanh toán thành công! Đơn hàng đã hoàn tất.')
-      queryClient.invalidateQueries(['cashier-orders']) // Làm mới danh sách ngay lập tức
-      queryClient.invalidateQueries(['orders']) // Refresh thêm key này cho chắc
+      message.success('Thanh toán thành công!')
+      queryClient.invalidateQueries(['cashier-orders'])
+      queryClient.invalidateQueries(['tables'])
       onClose()
     },
-    onError: (error) => {
-      console.error('Lỗi update Paid:', error)
-      message.warning('Đã thu tiền nhưng chưa cập nhật được trạng thái. Vui lòng thử lại.')
-    },
+    onError: () => message.warning('Lỗi cập nhật trạng thái.'),
   })
 
-  // --- 2. BƯỚC GIỮA: Tạo hóa đơn ---
   const createInvoiceMutation = useMutation({
     mutationFn: (payload) => http.post('/invoices', payload),
-    onSuccess: (res) => {
-      console.log('Tạo hóa đơn thành công, chuẩn bị update Paid...')
-      // Sau khi tạo hóa đơn thành công -> Cập nhật trạng thái Order thành Paid
-      updateToPaidMutation.mutate()
-    },
-    onError: (err) => {
-      console.error('Lỗi tạo hóa đơn:', err)
-      const msg = err.response?.data?.message || 'Lỗi tạo hóa đơn.'
-      message.error(msg)
-    },
+    onSuccess: () => updateToPaidMutation.mutate(),
+    onError: (err) => message.error(err.response?.data?.message || 'Lỗi tạo hóa đơn.'),
   })
 
-  // --- 1. BƯỚC ĐẦU: Logic xử lý ---
   const handleConfirmPayment = async () => {
     if (!order) return
-
     try {
-      // Bước 1: Ép trạng thái về Completed (Yêu cầu của Backend để tạo được Invoice)
-      // Chỉ gọi nếu trạng thái chưa phải là Completed
       if (order.status !== 'Completed') {
-        console.log('Chuyển trạng thái sang Completed trước...')
         await http.patch(`/orders/${order._id}/status`, { status: 'Completed' })
       }
 
-      // Bước 2: Tạo Payload CHUẨN (Quan trọng nhất)
-      const payload = {
-        order_id: order._id, // <-- SỬA LỖI 1: Truyền String, KHÔNG dùng mảng [order._id]
-        method: 'Cash', // <-- SỬA LỖI 2: Dùng key 'method' cho giống bên Client
-        amount: order.total_price,
-      }
+      // Tính lại tổng tiền thực tế từ danh sách món đã lọc (Optional nhưng an toàn hơn)
+      const realTotal =
+        orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0) || order.total_price
 
-      console.log('Gửi yêu cầu tạo hóa đơn:', payload)
+      const payload = {
+        order_id: order._id,
+        method: 'Cash',
+        amount: realTotal,
+      }
       createInvoiceMutation.mutate(payload)
     } catch (error) {
-      console.error('Lỗi quy trình:', error)
-      message.error('Lỗi hệ thống: Không thể cập nhật trạng thái đơn hàng.')
+      message.error('Lỗi hệ thống.')
     }
   }
+
+  // --- CẤU HÌNH CỘT BẢNG ---
+  const columns = [
+    {
+      title: 'Tên món',
+      dataIndex: 'dish_id',
+      render: (d, r) => d?.dish_name || r.dish_name || '---',
+    },
+    { title: 'SL', dataIndex: 'quantity', align: 'center', width: 60 },
+    { title: 'Đơn giá', dataIndex: 'price', align: 'right', render: (v) => formatVnd(v) },
+    {
+      title: 'Thành tiền',
+      align: 'right',
+      render: (_, r) => formatVnd((r.price || 0) * (r.quantity || 0)),
+    },
+  ]
 
   if (!order) return null
 
@@ -76,53 +100,76 @@ const CashierPaymentModal = ({ isOpen, onClose, order }) => {
     <Modal
       title={
         <div className="text-xl font-bold flex items-center gap-2">
-          <DollarOutlined /> Xác nhận thu tiền mặt
+          <SolutionOutlined /> Chi tiết thanh toán
         </div>
       }
       open={isOpen}
       onCancel={onClose}
       footer={null}
-      width={600}
+      width={700}
+      centered
     >
       <div className="flex flex-col gap-4">
-        {/* Thông tin đơn hàng */}
+        {/* Thông tin chung */}
         <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-          <Descriptions column={1} bordered size="small" layout="horizontal">
+          <Descriptions column={2} size="small">
             <Descriptions.Item label="Mã đơn">
-              <span className="font-mono">#{order._id.slice(-6)}</span>
+              <span className="font-mono">#{order._id.slice(-6).toUpperCase()}</span>
             </Descriptions.Item>
             <Descriptions.Item label="Bàn">
               <strong>{order.table_id?.name || order.table_id?.table_name || 'Mang về'}</strong>
             </Descriptions.Item>
-            <Descriptions.Item label="Trạng thái hiện tại">
-              <Tag color={order.status === 'Pending Payment' ? 'red' : 'blue'}>{order.status}</Tag>
+            <Descriptions.Item label="Tổng tiền">
+              <span className="text-xl font-bold text-red-600">{formatVnd(order.total_price)}</span>
+            </Descriptions.Item>
+            <Descriptions.Item label="Trạng thái">
+              <Tag color="blue">{order.status}</Tag>
             </Descriptions.Item>
           </Descriptions>
-
-          <div className="mt-6 pt-4 border-t border-dashed flex justify-between items-center">
-            <span className="text-lg font-medium text-gray-600">Tổng tiền phải thu:</span>
-            <span className="text-3xl font-bold text-red-600">{formatVnd(order.total_price)}</span>
-          </div>
         </div>
 
-        <div className="text-center text-gray-500 text-sm italic">
-          *Hành động này sẽ xác nhận đã nhận tiền mặt và hoàn tất đơn hàng.
+        <Divider orientation="left" style={{ margin: '0' }}>
+          Danh sách món ăn (Thực tế)
+        </Divider>
+
+        {/* Bảng món ăn */}
+        <div className="max-h-[300px] overflow-y-auto border rounded-md">
+          <Table
+            dataSource={orderItems} // Dữ liệu đã lọc bỏ món hủy
+            columns={columns}
+            rowKey={(r) => r._id || Math.random()}
+            pagination={false}
+            loading={isLoading}
+            size="small"
+            summary={() => (
+              // Hiện tổng tiền thực tế dưới chân bảng
+              <Table.Summary.Row className="bg-gray-50">
+                <Table.Summary.Cell index={0} colSpan={3} className="text-right font-bold">
+                  Tổng cộng:
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={1} className="text-right font-bold text-red-600">
+                  {formatVnd(orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0))}
+                </Table.Summary.Cell>
+              </Table.Summary.Row>
+            )}
+          />
         </div>
 
         {/* Nút hành động */}
-        <div className="flex gap-3 justify-end mt-2">
+        <div className="flex gap-3 justify-end mt-4 pt-4 border-t">
           <Button size="large" onClick={onClose}>
-            Hủy bỏ
+            Đóng
           </Button>
           <Button
             type="primary"
             size="large"
-            className="bg-green-600 hover:!bg-green-500 border-none min-w-[150px]"
+            className="bg-green-600 hover:!bg-green-500 border-none h-12 text-lg font-bold min-w-[180px]"
             icon={<CheckCircleOutlined />}
             loading={createInvoiceMutation.isPending || updateToPaidMutation.isPending}
             onClick={handleConfirmPayment}
+            disabled={order.status === 'Paid'}
           >
-            Đã thu tiền
+            {order.status === 'Paid' ? 'Đã thu tiền' : 'Xác nhận thu tiền'}
           </Button>
         </div>
       </div>

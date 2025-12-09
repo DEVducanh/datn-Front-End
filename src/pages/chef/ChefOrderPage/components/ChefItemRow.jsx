@@ -1,57 +1,133 @@
 import React from 'react'
 import { useMutation } from '@tanstack/react-query'
 import http from '@/apis/http'
-import { message, Select, Tag, Badge } from 'antd'
-import { ITEM_STATUS_OPTIONS } from '../constants'
+import { Button, message, Tag, Badge, Popconfirm } from 'antd' // Thêm Popconfirm
+import { FireOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons' // Thêm CloseOutlined
 
-const ChefItemRow = ({ item, refetchItems }) => {
-  const updateItemStatusMutation = useMutation({
-    mutationFn: ({ itemId, status }) => http.patch(`/order-item/${itemId}/status`, { status }),
-    onSuccess: () => {
-      message.success('Cập nhật thành công!')
-      refetchItems()
+const ChefItemRow = ({ item, refetch }) => {
+  // API cập nhật trạng thái
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ itemId, newStatus }) =>
+      http.patch(`/order-item/${itemId}/status`, { status: newStatus }),
+    onSuccess: (data, variables) => {
+      let msg = ''
+      switch (variables.newStatus) {
+        case 'Processing':
+          msg = '👨‍🍳 Bắt đầu nấu!'
+          break
+        case 'Ready':
+          msg = '✅ Món đã xong!'
+          break
+        case 'Cancelled':
+          msg = '🗑️ Đã hủy món!'
+          break
+        default:
+          msg = 'Đã cập nhật'
+      }
+      message.success(msg)
+      refetch()
     },
-    onError: (err) => {
-      const msg = err.response?.data?.message || 'Lỗi cập nhật trạng thái.'
-      message.error(msg)
-    },
+    onError: () => message.error('Lỗi kết nối!'),
   })
 
-  const dishName = item.dish_id?.dish_name || item.dish_name || 'Món không rõ'
-  const currentStatus = item.status || 'Pending'
-  const isFinished =
-    currentStatus === 'Served' || currentStatus === 'Ready' || currentStatus === 'Cancelled'
+  const handleUpdate = (newStatus) => {
+    updateStatusMutation.mutate({ itemId: item._id, newStatus })
+  }
+
+  const status = item.status
+  const dishName = item.dish_id?.dish_name || item.dish_name || 'Tên món lỗi'
+  const note = item.note
+
+  // --- TRẠNG THÁI: ĐÃ XONG HOẶC ĐÃ PHỤC VỤ ---
+  if (status === 'Served' || status === 'Ready') {
+    return (
+      <div className="flex justify-between items-center p-2 mb-2 bg-gray-50 rounded border border-gray-100 opacity-60">
+        <span className="text-gray-500 line-through text-sm">
+          x{item.quantity} {dishName}
+        </span>
+        <Tag color="green">Đã xong</Tag>
+      </div>
+    )
+  }
+
+  // --- TRẠNG THÁI: ĐANG NẤU HOẶC CHỜ NẤU ---
+  const isProcessing = status === 'Processing'
+  const isPending = status === 'Pending'
 
   return (
     <div
-      className={`flex justify-between items-center p-3 mb-3 rounded-lg border transition-all ${isFinished ? 'bg-gray-50 border-gray-200 opacity-60' : 'bg-white border-orange-100 shadow-sm'}`}
+      className={`p-3 mb-2 rounded border-l-4 shadow-sm transition-all ${
+        isProcessing
+          ? 'bg-blue-50 border-l-blue-500 border-blue-100'
+          : 'bg-white border-l-orange-400 border-gray-200'
+      }`}
     >
-      <div className="flex items-center gap-3 flex-1">
-        <div className="flex flex-col items-center justify-center bg-red-50 text-red-600 font-bold rounded-md w-10 h-10 border border-red-100 flex-shrink-0">
-          <span className="text-xs text-gray-400">SL</span>
-          <span className="text-lg leading-none">{item.quantity}</span>
-        </div>
-        <span
-          className={`font-medium text-lg ${isFinished ? 'line-through text-gray-400' : 'text-gray-800'}`}
-        >
+      <div className="flex justify-between items-start mb-2">
+        <div className="font-bold text-gray-800 text-base">
+          <Badge
+            count={item.quantity}
+            style={{ backgroundColor: isProcessing ? '#1890ff' : '#fa8c16' }}
+            className="mr-2"
+          />
           {dishName}
-        </span>
+        </div>
+
+        {/* NÚT HỦY MÓN (Nằm góc trên bên phải) */}
+        {(isPending || isProcessing) && (
+          <Popconfirm
+            title="Hủy món này?"
+            description="Bạn có chắc chắn muốn hủy món ăn này không?"
+            onConfirm={() => handleUpdate('Cancelled')}
+            okText="Hủy món"
+            cancelText="Không"
+            okButtonProps={{ danger: true }}
+          >
+            <Button
+              type="text"
+              danger
+              size="small"
+              icon={<CloseOutlined />}
+              className="hover:bg-red-50"
+            />
+          </Popconfirm>
+        )}
       </div>
-      <Select
-        value={currentStatus}
-        style={{ width: 130 }}
-        onChange={(val) => updateItemStatusMutation.mutate({ itemId: item._id, status: val })}
-        disabled={updateItemStatusMutation.isPending}
-        options={ITEM_STATUS_OPTIONS.map((opt) => ({
-          value: opt.value,
-          label: (
-            <Tag color={opt.color} className="mr-0 w-full text-center">
-              {opt.label}
-            </Tag>
-          ),
-        }))}
-      />
+
+      {note && (
+        <div className="mb-2 text-red-500 text-xs italic bg-red-50 p-1 rounded">Lưu ý: {note}</div>
+      )}
+
+      <div className="flex justify-end gap-2 mt-2">
+        {/* Nút NẤU NGAY */}
+        {isPending && (
+          <Button
+            type="primary"
+            size="small"
+            className="bg-orange-500 hover:bg-orange-600 border-orange-500 flex-1 font-semibold"
+            icon={<FireOutlined />}
+            loading={updateStatusMutation.isPending}
+            onClick={() => handleUpdate('Processing')}
+          >
+            Nấu ngay
+          </Button>
+        )}
+
+        {/* Nút HOÀN TẤT */}
+        {isProcessing && (
+          <Button
+            type="primary"
+            size="small"
+            className="bg-green-600 hover:bg-green-500 border-green-600 flex-1 font-semibold"
+            icon={<CheckOutlined />}
+            loading={updateStatusMutation.isPending}
+            onClick={() => handleUpdate('Ready')}
+          >
+            Hoàn tất
+          </Button>
+        )}
+      </div>
     </div>
   )
 }
+
 export default ChefItemRow

@@ -1,22 +1,37 @@
-import React, { useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Card, Table, Tag, Progress, List, Avatar, Spin, Statistic } from 'antd'
+import {
+  Card,
+  Table,
+  Tag,
+  DatePicker,
+  Select,
+  Spin,
+  Statistic,
+  Row,
+  Col,
+  Tooltip,
+  Empty,
+  List,
+  Avatar,
+} from 'antd'
 import {
   DollarSign,
-  TrendingUp,
   ShoppingBag,
   Activity,
-  CheckCircle,
-  XCircle,
-  Clock,
-  User,
+  Calendar,
+  ArrowUp,
+  ArrowDown,
+  Clock, // Icon cho hoạt động gần đây
+  User, // Icon cho hoạt động gần đây
 } from 'lucide-react'
+import dayjs from 'dayjs'
 import invoiceAPI from '@/apis/invoice/invoice.api'
 
 // Format tiền tệ
 const formatVnd = (n) => (n || 0).toLocaleString('vi-VN') + 'đ'
 
-// Hàm tính thời gian
+// Hàm tính thời gian trôi qua (Cho phần Hoạt động gần đây)
 const timeAgo = (dateString) => {
   if (!dateString) return 'Vừa xong'
   const date = new Date(dateString)
@@ -35,210 +50,219 @@ const timeAgo = (dateString) => {
   return 'Vừa xong'
 }
 
-// --- HÀM LẤY TÊN KHÁCH (QUÉT SẠCH MỌI TRƯỜNG DỮ LIỆU) ---
+const { RangePicker } = DatePicker
+const { Option } = Select
+
+// --- COMPONENT BIỂU ĐỒ (CSS THUẦN) ---
+const CustomBarChart = ({ data }) => {
+  if (!data || data.length === 0) return <Empty description="Không có dữ liệu" />
+  const maxValue = Math.max(...data.map((d) => d.revenue)) || 1
+
+  return (
+    <div className="w-full h-[300px] flex items-end gap-2 pt-10 pb-6 px-2 relative">
+      <div className="absolute inset-0 border-b border-l border-gray-200 pointer-events-none" />
+      {data.map((item, index) => {
+        const heightPercent = (item.revenue / maxValue) * 100
+        return (
+          <Tooltip
+            key={index}
+            title={
+              <div className="text-center">
+                <div className="font-bold">{item.dateDisplay}</div>
+                <div>{formatVnd(item.revenue)}</div>
+                <div className="text-xs">({item.orders} đơn)</div>
+              </div>
+            }
+          >
+            <div className="flex-1 flex flex-col items-center group cursor-pointer h-full justify-end">
+              <div
+                style={{ height: `${heightPercent || 2}%` }}
+                className={`w-full max-w-[40px] rounded-t-sm transition-all relative min-h-[4px] ${item.revenue > 0 ? 'bg-blue-400 group-hover:bg-blue-600' : 'bg-gray-100'}`}
+              />
+              <div className="mt-2 text-[10px] text-gray-500 w-full text-center truncate">
+                {item.name}
+              </div>
+            </div>
+          </Tooltip>
+        )
+      })}
+    </div>
+  )
+}
+
+// --- HÀM LẤY TÊN KHÁCH ---
 const getCustomerName = (record) => {
   if (!record) return 'Khách vãng lai'
-
-  // Hàm phụ: Tìm tên trong 1 object bất kỳ
-  const extractName = (obj) => {
-    if (!obj) return null
-    // Ưu tiên name -> full_name -> username -> email
-    return obj.name || obj.full_name || obj.username || obj.email || obj.display_name
-  }
-
-  // 1. Tìm trong field 'user' (Thường gặp nhất)
-  if (record.user && typeof record.user === 'object') {
-    const name = extractName(record.user)
-    if (name) return name
-  }
-
-  // 2. Tìm trong field 'user_id' (Nếu backend trả về populate)
-  if (record.user_id && typeof record.user_id === 'object') {
-    const name = extractName(record.user_id)
-    if (name) return name
-  }
-
-  // 3. Tìm trong order_id (Nếu lồng nhau)
+  const extractName = (obj) => obj?.name || obj?.full_name || obj?.username || obj?.email
+  if (record.user && typeof record.user === 'object') return extractName(record.user)
+  if (record.user_id && typeof record.user_id === 'object') return extractName(record.user_id)
   const order = Array.isArray(record.order_id) ? record.order_id[0] : record.order_id
-  if (order) {
-    if (order.user && typeof order.user === 'object') {
-      const name = extractName(order.user)
-      if (name) return name
-    }
-    if (order.user_id && typeof order.user_id === 'object') {
-      const name = extractName(order.user_id)
-      if (name) return name
-    }
-  }
-
-  // 4. Nếu vẫn không thấy object, kiểm tra xem có string ID không
-  if (typeof record.user === 'string') return `Khách (ID: ${record.user.slice(-4)})`
-  if (typeof record.user_id === 'string') return `Khách (ID: ${record.user_id.slice(-4)})`
-
-  // 5. Đường cùng
-  return 'Khách vãng lai'
+  if (order?.user && typeof order.user === 'object') return extractName(order.user)
+  return 'Khách lẻ'
 }
 
 const Dashboard = () => {
+  const [dateRange, setDateRange] = useState([dayjs().startOf('month'), dayjs().endOf('month')])
+  const [filterType, setFilterType] = useState('thisMonth')
+
+  // --- API LẤY DỮ LIỆU ---
   const { data: invoices = [], isLoading } = useQuery({
-    queryKey: ['invoices', 'dashboard_final_fix_name'],
+    queryKey: ['invoices', 'dashboard_full_v2'],
     queryFn: async () => {
       try {
         const res = await invoiceAPI.getAll()
-        if (res?.data?.data) return res.data.data
-        if (res?.data) return res.data
-        return res || []
+        return res?.data?.data || res?.data || res || []
       } catch (err) {
         return []
       }
     },
-    staleTime: 1000 * 60 * 2,
+    staleTime: 0,
   })
 
-  const { stats, activities } = useMemo(() => {
-    const now = new Date()
-    const currentMonth = now.getMonth()
-    const currentYear = now.getFullYear()
+  // --- TÍNH TOÁN SỐ LIỆU ---
+  const { stats, chartData, recentOrders, activities } = useMemo(() => {
+    if (!invoices.length) return { stats: {}, chartData: [], recentOrders: [], activities: [] }
 
-    let result = {
-      revenue: 0,
-      totalOrders: 0,
-      successOrders: 0,
-      cancelledOrders: 0,
-      growth: 0,
-      kpiTarget: 1000000,
-      kpiPercent: 0,
-      recentOrders: [],
-    }
+    const startDate = dateRange ? dateRange[0] : dayjs().startOf('month')
+    const endDate = dateRange ? dateRange[1] : dayjs().endOf('month')
 
-    if (!invoices || invoices.length === 0) return { stats: result, activities: [] }
-
-    const thisMonthInvoices = []
-    const lastMonthInvoices = []
-    let firstOrderDate = now
-
-    invoices.forEach((inv) => {
-      const dateStr = inv.created_at || inv.createdAt
-      if (!dateStr) return
-
-      const d = new Date(dateStr)
-      if (d < firstOrderDate) firstOrderDate = d
-
-      if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
-        thisMonthInvoices.push(inv)
-      }
-
-      const lastMonthIndex = currentMonth === 0 ? 11 : currentMonth - 1
-      const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear
-      if (d.getMonth() === lastMonthIndex && d.getFullYear() === lastMonthYear) {
-        lastMonthInvoices.push(inv)
-      }
+    // 1. Lọc hóa đơn theo ngày
+    const filteredInvoices = invoices.filter((inv) => {
+      const d = dayjs(inv.created_at || inv.createdAt)
+      return d.isAfter(startDate.startOf('day')) && d.isBefore(endDate.endOf('day'))
     })
 
-    // Doanh thu
-    const calculateRevenue = (list) =>
-      list
-        .filter((inv) => {
-          const status = (inv.status || '').toLowerCase().trim()
-          return status === 'paid' || status === 'completed'
-        })
-        .reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0)
-
-    const revenueThisMonth = calculateRevenue(thisMonthInvoices)
-    const revenueLastMonth = calculateRevenue(lastMonthInvoices)
-
-    // Tăng trưởng
-    let growthRate = 0
-    if (revenueLastMonth > 0) {
-      growthRate = ((revenueThisMonth - revenueLastMonth) / revenueLastMonth) * 100
-    }
-
-    // KPI
-    const monthsDiff =
-      (currentYear - firstOrderDate.getFullYear()) * 12 + (currentMonth - firstOrderDate.getMonth())
-    const kpiTarget = 1000000 + Math.max(0, monthsDiff) * 1000000
-    const kpiPercent =
-      kpiTarget > 0 ? Math.min(100, Math.round((revenueThisMonth / kpiTarget) * 100)) : 0
-
-    // Số liệu khác
-    const successOrders = thisMonthInvoices.filter((i) =>
+    // 2. Tính tổng (Chỉ đơn thành công)
+    const validInvoices = filteredInvoices.filter((i) =>
       ['paid', 'completed'].includes((i.status || '').toLowerCase())
-    ).length
-    const cancelledOrders = thisMonthInvoices.filter((i) =>
-      ['cancelled', 'rejected'].includes((i.status || '').toLowerCase())
-    ).length
+    )
 
-    // Sắp xếp
-    const sortedAll = [...invoices].sort((a, b) => {
-      const dateA = new Date(a.created_at || a.createdAt || 0)
-      const dateB = new Date(b.created_at || b.createdAt || 0)
-      return dateB - dateA
-    })
+    const totalRevenue = validInvoices.reduce(
+      (sum, inv) => sum + (Number(inv.total_amount) || 0),
+      0
+    )
+    const totalOrders = validInvoices.length
+    const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0
 
-    result = {
-      revenue: revenueThisMonth,
-      totalOrders: thisMonthInvoices.length,
-      successOrders,
-      cancelledOrders,
-      growth: growthRate,
-      kpiTarget,
-      kpiPercent,
-      recentOrders: sortedAll.slice(0, 5),
+    // 3. Data Biểu đồ
+    const dailyData = {}
+    let curr = startDate.clone()
+    const isLongRange = endDate.diff(startDate, 'day') > 31
+    const formatKey = isLongRange ? 'MM/YYYY' : 'DD/MM'
+    const stepUnit = isLongRange ? 'month' : 'day'
+
+    while (curr.isBefore(endDate) || curr.isSame(endDate, stepUnit)) {
+      const key = curr.format(formatKey)
+      dailyData[key] = { name: key, dateDisplay: curr.format('DD/MM/YYYY'), revenue: 0, orders: 0 }
+      curr = curr.add(1, stepUnit)
     }
 
-    // Hoạt động gần đây (Activity Log)
-    const act = sortedAll.slice(0, 5).map((inv) => {
-      const name = getCustomerName(inv) // Sử dụng hàm đã fix
-      const dateStr = inv.created_at || inv.createdAt
-      const firstChar = name ? name.charAt(0).toUpperCase() : 'K'
+    validInvoices.forEach((inv) => {
+      const key = dayjs(inv.created_at || inv.createdAt).format(formatKey)
+      if (dailyData[key]) {
+        dailyData[key].revenue += Number(inv.total_amount) || 0
+        dailyData[key].orders += 1
+      }
+    })
 
+    // 4. Data Hoạt động gần đây (Lấy 6 cái mới nhất trong toàn bộ lịch sử hoặc trong khoảng lọc tùy bạn)
+    // Ở đây mình lấy trong khoảng lọc để đồng bộ
+    const sortedInvoices = [...filteredInvoices].sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+    )
+
+    const actList = sortedInvoices.slice(0, 6).map((inv) => {
+      const name = getCustomerName(inv)
       return {
+        id: inv._id,
         user: name,
         amount: inv.total_amount,
-        time: timeAgo(dateStr),
-        avatar: firstChar,
+        time: timeAgo(inv.created_at || inv.createdAt),
+        avatar: name.charAt(0).toUpperCase(),
         status: (inv.status || '').toLowerCase(),
       }
     })
 
-    return { stats: result, activities: act }
-  }, [invoices])
+    // 5. Growth
+    const daysDiff = endDate.diff(startDate, 'day') + 1
+    const prevInvoices = invoices.filter((inv) => {
+      const d = dayjs(inv.created_at || inv.createdAt)
+      return (
+        ['paid', 'completed'].includes((inv.status || '').toLowerCase()) &&
+        d.isAfter(startDate.subtract(daysDiff, 'day')) &&
+        d.isBefore(startDate)
+      )
+    })
+    const prevRevenue = prevInvoices.reduce((sum, i) => sum + (Number(i.total_amount) || 0), 0)
+    let growth = prevRevenue > 0 ? ((totalRevenue - prevRevenue) / prevRevenue) * 100 : 0
 
+    return {
+      stats: {
+        revenue: totalRevenue,
+        orders: totalOrders,
+        avgValue: avgOrderValue,
+        growth,
+        prevRevenue,
+      },
+      chartData: Object.values(dailyData),
+      recentOrders: sortedInvoices.slice(0, 8), // Bảng bên trái lấy 8 dòng
+      activities: actList, // List bên phải lấy 6 dòng
+    }
+  }, [invoices, dateRange])
+
+  const handleFilterChange = (value) => {
+    setFilterType(value)
+    const today = dayjs()
+    switch (value) {
+      case 'today':
+        setDateRange([today.startOf('day'), today.endOf('day')])
+        break
+      case 'thisWeek':
+        setDateRange([today.startOf('week'), today.endOf('week')])
+        break
+      case 'thisMonth':
+        setDateRange([today.startOf('month'), today.endOf('month')])
+        break
+      case 'thisYear':
+        setDateRange([today.startOf('year'), today.endOf('year')])
+        break
+      default:
+        break
+    }
+  }
+
+  // Cột bảng đơn hàng
   const columns = [
     {
       title: 'Mã đơn',
       dataIndex: '_id',
-      key: '_id',
       render: (id) => (
-        <span className="font-mono text-gray-500">#{id ? id.slice(-6).toUpperCase() : '...'}</span>
+        <span className="text-gray-500 font-mono">#{id ? id.slice(-6).toUpperCase() : '---'}</span>
       ),
     },
     {
-      title: 'Khách hàng',
-      key: 'customer',
-      render: (_, record) => (
-        <span className="font-medium text-gray-700">{getCustomerName(record)}</span>
-      ),
+      title: 'Khách',
+      render: (_, r) => <span className="text-xs font-medium">{getCustomerName(r)}</span>,
     },
     {
-      title: 'Trạng thái',
-      dataIndex: 'status',
-      key: 'status',
-      render: (status) => {
-        const s = (status || '').toLowerCase()
-        let color = 'default'
-        if (s === 'paid' || s === 'completed') color = 'success'
-        else if (s === 'unpaid' || s === 'pending') color = 'warning'
-        else if (s === 'cancelled') color = 'error'
-        return <Tag color={color}>{(status || 'UNKNOWN').toUpperCase()}</Tag>
-      },
-    },
-    {
-      title: 'Tổng tiền',
+      title: 'Tổng',
       dataIndex: 'total_amount',
-      key: 'total_amount',
       align: 'right',
-      render: (amount) => <span className="font-bold text-gray-700">{formatVnd(amount)}</span>,
+      render: (v) => <span className="font-bold text-xs">{formatVnd(v)}</span>,
+    },
+    {
+      title: 'TT',
+      dataIndex: 'status',
+      align: 'center',
+      width: 80,
+      render: (s) => {
+        const status = (s || '').toLowerCase()
+        return (
+          <Tag color={['paid', 'completed'].includes(status) ? 'success' : 'warning'}>
+            {status === 'paid' ? 'OK' : s.toUpperCase()}
+          </Tag>
+        )
+      },
     },
   ]
 
@@ -249,115 +273,139 @@ const Dashboard = () => {
       </div>
     )
 
-  const currentMonthDisplay = new Date().getMonth() + 1
-
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Trang tổng quan</h1>
-        <span className="text-gray-500">Trang chủ / Thống kê</span>
+      {/* HEADER & FILTER */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800 m-0">Tổng quan</h1>
+        </div>
+        <div className="flex flex-wrap gap-2 bg-white p-1.5 rounded-lg shadow-sm border border-gray-100">
+          <Select
+            value={filterType}
+            onChange={handleFilterChange}
+            style={{ width: 130 }}
+            bordered={false}
+          >
+            <Option value="today">Hôm nay</Option>
+            <Option value="thisWeek">Tuần này</Option>
+            <Option value="thisMonth">Tháng này</Option>
+            <Option value="thisYear">Năm nay</Option>
+            <Option value="custom">Tùy chọn...</Option>
+          </Select>
+          <div className="w-[1px] bg-gray-200 my-1"></div>
+          <RangePicker
+            value={dateRange}
+            onChange={(d) => {
+              setDateRange(d)
+              setFilterType('custom')
+            }}
+            format="DD/MM/YYYY"
+            allowClear={false}
+            bordered={false}
+          />
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-        <Card bordered={false} className="shadow-sm rounded-lg border-l-4 border-green-500">
-          <Statistic
-            title={
-              <span className="text-gray-600 font-bold text-xs uppercase">
-                Doanh thu Tháng {currentMonthDisplay}
-              </span>
-            }
-            value={stats.revenue}
-            formatter={(val) => formatVnd(val)}
-            prefix={<DollarSign size={20} className="text-green-600" />}
-            valueStyle={{ color: '#16a34a', fontWeight: 'bold' }}
-          />
-          <div className="mt-2 text-xs text-gray-400">Đã thanh toán</div>
-        </Card>
+      {/* STATS CARDS */}
+      <Row gutter={[16, 16]} className="mb-6">
+        <Col xs={24} sm={8}>
+          <Card
+            bordered={false}
+            className="shadow-sm rounded-xl h-full border-l-4 border-green-500"
+          >
+            <Statistic
+              title={<span className="text-gray-500 font-bold text-xs uppercase">Doanh thu</span>}
+              value={stats.revenue}
+              formatter={formatVnd}
+              valueStyle={{ fontWeight: 700, color: '#16a34a' }}
+            />
+            <div className="mt-2 text-xs flex items-center gap-1">
+              {stats.growth >= 0 ? (
+                <span className="text-green-600 bg-green-50 px-1 rounded flex items-center">
+                  <ArrowUp size={12} /> {stats.growth.toFixed(1)}%
+                </span>
+              ) : (
+                <span className="text-red-500 bg-red-50 px-1 rounded flex items-center">
+                  <ArrowDown size={12} /> {Math.abs(stats.growth).toFixed(1)}%
+                </span>
+              )}
+              <span className="text-gray-400">so kỳ trước</span>
+            </div>
+          </Card>
+        </Col>
+        <Col xs={24} sm={8}>
+          <Card bordered={false} className="shadow-sm rounded-xl h-full border-l-4 border-blue-500">
+            <Statistic
+              title={<span className="text-gray-500 font-bold text-xs uppercase">Đơn hàng</span>}
+              value={stats.orders}
+              valueStyle={{ fontWeight: 700 }}
+            />
+            <div className="mt-2 text-xs text-gray-400">Đơn hàng thành công</div>
+          </Card>
+        </Col>
+        <Col xs={24} sm={8}>
+          <Card
+            bordered={false}
+            className="shadow-sm rounded-xl h-full border-l-4 border-orange-500"
+          >
+            <Statistic
+              title={<span className="text-gray-500 font-bold text-xs uppercase">TB / Đơn</span>}
+              value={stats.avgValue}
+              formatter={formatVnd}
+              valueStyle={{ fontWeight: 700, color: '#f59e0b' }}
+            />
+            <div className="mt-2 text-xs text-gray-400">Giá trị trung bình</div>
+          </Card>
+        </Col>
+      </Row>
 
-        <Card bordered={false} className="shadow-sm rounded-lg border-l-4 border-orange-500">
-          <Statistic
-            title={
-              <span className="text-gray-600 font-bold text-xs uppercase">
-                Đơn hàng Tháng {currentMonthDisplay}
-              </span>
-            }
-            value={stats.totalOrders}
-            prefix={<ShoppingBag size={20} className="text-orange-500" />}
-            valueStyle={{ fontWeight: 'bold' }}
-          />
-          <div className="mt-3 flex gap-3 text-xs">
-            <span className="text-green-600 flex items-center gap-1 bg-green-50 px-1.5 rounded">
-              <CheckCircle size={10} /> {stats.successOrders}
-            </span>
-            <span className="text-red-500 flex items-center gap-1 bg-red-50 px-1.5 rounded">
-              <XCircle size={10} /> {stats.cancelledOrders}
-            </span>
+      {/* CHART */}
+      <Card
+        title={
+          <div className="flex items-center gap-2">
+            <Calendar size={18} /> <span className="font-bold">Biểu đồ doanh thu</span>
           </div>
-        </Card>
+        }
+        bordered={false}
+        className="shadow-sm rounded-xl mb-6"
+      >
+        <CustomBarChart data={chartData} />
+      </Card>
 
-        <Card bordered={false} className="shadow-sm rounded-lg">
-          <Statistic
-            title={<span className="text-gray-500 font-medium text-xs">Tăng trưởng TB</span>}
-            value={stats.growth}
-            precision={1}
-            suffix="%"
-            prefix={
-              <TrendingUp
-                size={20}
-                className={stats.growth >= 0 ? 'text-blue-500' : 'text-red-500'}
-              />
-            }
-            valueStyle={{ color: stats.growth >= 0 ? '#3b82f6' : '#ef4444' }}
-          />
-          <div className="mt-2 text-xs text-gray-400">So với tháng trước</div>
-        </Card>
-
-        <Card bordered={false} className="shadow-sm rounded-lg">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-gray-500 font-medium text-xs">
-              KPI Tháng {currentMonthDisplay}
-            </span>
-            <span className="font-bold text-gray-700">{stats.kpiPercent}%</span>
-          </div>
-          <Progress
-            percent={stats.kpiPercent}
-            showInfo={false}
-            strokeColor="#3b82f6"
-            size="small"
-          />
-          <div className="mt-4 text-xs text-gray-500 flex justify-between items-center">
-            <span>Mục tiêu:</span>
-            <span className="font-bold text-blue-600">{formatVnd(stats.kpiTarget)}</span>
-          </div>
-        </Card>
-      </div>
-
+      {/* --- PHẦN GRID CHIA 2 CỘT: BẢNG ĐƠN & HOẠT ĐỘNG --- */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Cột Trái (2/3): Bảng đơn hàng */}
         <div className="lg:col-span-2">
-          <Card title="Đơn hàng mới nhất" bordered={false} className="shadow-sm rounded-lg h-full">
+          <Card
+            title={<span className="font-bold">Giao dịch gần đây</span>}
+            bordered={false}
+            className="shadow-sm rounded-xl h-full"
+          >
             <Table
-              dataSource={stats.recentOrders}
+              dataSource={recentOrders}
               columns={columns}
               pagination={false}
               rowKey="_id"
-              size="middle"
-              locale={{ emptyText: 'Chưa có đơn hàng nào' }}
+              size="small"
+              locale={{ emptyText: 'Không có dữ liệu' }}
             />
           </Card>
         </div>
 
+        {/* Cột Phải (1/3): Hoạt động gần đây (ĐÃ QUAY LẠI) */}
         <div className="lg:col-span-1">
           <Card
             title={
               <div className="flex items-center gap-2">
-                <Activity size={18} /> Hoạt động gần đây
+                <Activity size={18} /> <span className="font-bold">Hoạt động</span>
               </div>
             }
             bordered={false}
-            className="shadow-sm rounded-lg h-full"
+            className="shadow-sm rounded-xl h-full"
           >
             {activities.length === 0 ? (
-              <p className="text-gray-400 text-center py-4">Chưa có hoạt động nào</p>
+              <Empty description="Chưa có hoạt động" image={Empty.PRESENTED_IMAGE_SIMPLE} />
             ) : (
               <List
                 itemLayout="horizontal"
@@ -368,14 +416,12 @@ const Dashboard = () => {
                       avatar={
                         <Avatar
                           style={{
-                            backgroundColor:
-                              item.status === 'paid' || item.status === 'completed'
-                                ? '#f6ffed'
-                                : '#fff7e6',
-                            color:
-                              item.status === 'paid' || item.status === 'completed'
-                                ? '#52c41a'
-                                : '#fa8c16',
+                            backgroundColor: ['paid', 'completed'].includes(item.status)
+                              ? '#f6ffed'
+                              : '#fff7e6',
+                            color: ['paid', 'completed'].includes(item.status)
+                              ? '#52c41a'
+                              : '#fa8c16',
                             border: '1px solid #f0f0f0',
                           }}
                         >
@@ -388,7 +434,7 @@ const Dashboard = () => {
                       description={
                         <div className="flex flex-col">
                           <span className="text-xs text-gray-500">
-                            đã mua đơn hàng{' '}
+                            đơn hàng{' '}
                             <span className="font-medium text-gray-700">
                               {formatVnd(item.amount)}
                             </span>

@@ -148,29 +148,22 @@ const CategoryPage = () => {
   })
 
   // --- 5. Xử lý nút Thêm ---
-  const handleAddToCart = (product) => {
+  // --- 5. Xử lý nút Thêm (Đã nâng cấp logic gộp đơn) ---
+  const handleAddToCart = async (product) => {
+    // A. LẤY USER ID TỪ TOKEN
     let userId = null
-
-    // A. Lấy và Giải mã Token
     try {
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
-
       if (token) {
         const decoded = jwtDecode(token)
-        // Backend thường lưu ID trong token dưới tên: _id, id, hoặc sub.
-        // Bạn check thử xem cái nào đúng nhé. Thường là _id hoặc id.
+        // Lấy ID chuẩn từ token (thường là _id, id hoặc sub)
         userId = decoded._id || decoded.id || decoded.sub
-      } else {
-        // Nếu bắt buộc đăng nhập mới được gọi món thì mở dòng dưới ra:
-        // message.warning('Vui lòng đăng nhập để gọi món.')
-        // navigate(`/flareon/login?redirect=${encodeURIComponent(location.pathname)}`)
-        // return
       }
     } catch (e) {
       console.error('Lỗi giải mã token:', e)
     }
 
-    // B. Lấy Table ID
+    // B. LẤY TABLE ID (Ưu tiên localStorage)
     const tableIdToSend = localStorage.getItem('currentTableId') || qrCode
 
     if (!tableIdToSend) {
@@ -178,12 +171,50 @@ const CategoryPage = () => {
       return
     }
 
-    // C. Gọi API
+    // C. LOGIC "HỒI SINH" ĐƠN CŨ (FIX LỖI TÁCH ĐƠN)
+    // Trước khi thêm món, kiểm tra xem bàn này có đơn nào đang "ngủ đông" (Served/Completed) không
+    try {
+      // 1. Lấy danh sách tất cả đơn hàng
+      // (Lưu ý: Nếu API /orders trả về cấu trúc khác, bạn cần log ra xem để sửa đoạn res.data)
+      const res = await http.get('/orders')
+      const allOrders = res.data?.data || res.data || []
+
+      // 2. Tìm đơn hàng của bàn này mà chưa thanh toán (chưa Paid/Cancelled)
+      const activeOrder = allOrders.find((o) => {
+        const oTableId = o.table_id?._id || o.table_id
+        // So sánh ID bàn (chuyển về string cho chắc chắn)
+        const isSameTable = String(oTableId) === String(tableIdToSend)
+        // Chỉ lấy đơn chưa kết thúc hẳn
+        const isNotFinished = o.status !== 'Paid' && o.status !== 'Cancelled'
+
+        return isSameTable && isNotFinished
+      })
+
+      // 3. Nếu tìm thấy đơn, kiểm tra trạng thái của nó
+      if (activeOrder) {
+        // Danh sách các trạng thái khiến Backend tưởng là đơn đã xong -> Tạo đơn mới
+        // Thường là: Đã phục vụ (Served), Đã ship (Shipped), Chờ thu tiền (Completed)
+        const sleepingStatuses = ['Served', 'Shipped', 'Completed', 'Ready']
+
+        if (sleepingStatuses.includes(activeOrder.status)) {
+          console.log(`⚠️ Phát hiện đơn cũ (${activeOrder.status}). Đang mở lại để gộp món...`)
+
+          // => Gọi API cập nhật trạng thái về "Processing" (Đang nấu) hoặc "Pending"
+          // Để Backend nhận ra đây là đơn đang hoạt động và gộp món mới vào
+          await http.patch(`/orders/${activeOrder._id}/status`, { status: 'Processing' })
+        }
+      }
+    } catch (err) {
+      // Lỗi ở bước này không nên chặn việc gọi món, chỉ log ra thôi
+      console.warn('Lỗi kiểm tra đơn cũ (có thể bỏ qua):', err)
+    }
+
+    // D. GỌI API THÊM MÓN (Chính thức)
     addToCartMutation.mutate({
       table_id: tableIdToSend,
       dish_id: product._id,
       quantity: 1,
-      user_id: userId, // ID lấy từ token (hoặc null nếu khách vãng lai)
+      user_id: userId, // ID người dùng (hoặc null)
       dishName: product.name,
     })
   }
