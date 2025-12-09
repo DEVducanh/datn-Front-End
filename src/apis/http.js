@@ -11,14 +11,18 @@ const http = axios.create({
 // Request Interceptor
 http.interceptors.request.use(
   function (config) {
-    // --- THỨ TỰ ƯU TIÊN QUAN TRỌNG ---
+    // --- THỨ TỰ ƯU TIÊN ---
     // 1. Ưu tiên 'userToken' (Tài khoản thật)
     // 2. Sau đó mới đến 'access_token' (Khách vãng lai)
     const token = localStorage.getItem('userToken') || localStorage.getItem('access_token')
-    
-    if (token) {
+
+    // --- SỬA Ở ĐÂY: CHẶN TOKEN GIẢ ---
+    // Nếu có token VÀ token KHÔNG bắt đầu bằng 'guest_' (tức là token thật) thì mới gửi.
+    // Nếu là 'guest_...' (do Frontend tự chế) thì không gửi, để Server coi là khách public.
+    if (token && !token.startsWith('guest_')) {
       config.headers.Authorization = `Bearer ${token}`
     }
+
     return config
   },
   function (error) {
@@ -26,15 +30,14 @@ http.interceptors.request.use(
   }
 )
 
-// Response Interceptor (Giữ nguyên logic bắt Guest Token)
+// Response Interceptor (Giữ nguyên)
 http.interceptors.response.use(
   function (response) {
     // Chỉ bắt Guest Token nếu chưa có User Token (để tránh ghi đè tài khoản thật)
-    const guestToken = response.headers['x-guest-token'] || response.headers['X-Guest-Token'];
-    const hasRealUser = localStorage.getItem('userToken');
+    const guestToken = response.headers['x-guest-token'] || response.headers['X-Guest-Token']
+    const hasRealUser = localStorage.getItem('userToken')
 
     if (guestToken && !hasRealUser) {
-      // console.log("🔥 Guest Token:", guestToken)
       localStorage.setItem('access_token', guestToken)
     }
 
