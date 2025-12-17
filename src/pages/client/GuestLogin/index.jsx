@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react'
-import { Form, Input, Button, Card, message, Spin, Alert } from 'antd'
-import { UserOutlined, PhoneOutlined, EnvironmentOutlined, QrcodeOutlined } from '@ant-design/icons'
+import React from 'react'
+import { Form, Input, Button, Card, message, Spin } from 'antd'
+import { UserOutlined, PhoneOutlined, EnvironmentOutlined } from '@ant-design/icons'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/AuthContext'
@@ -11,34 +11,25 @@ const GuestLogin = () => {
   const [searchParams] = useSearchParams()
   const { login } = useAuth()
 
-  // Lấy ID từ URL
   const tableId = searchParams.get('table_id')
 
-  // --- LOGIC MỚI: GỌI API LẤY TẤT CẢ BÀN VÀ TỰ LỌC ---
   const { data: foundTable, isLoading, isError } = useQuery({
     queryKey: ['guest-all-tables', tableId],
     queryFn: async () => {
       if (!tableId) throw new Error("No ID");
       try {
-        // Gọi API lấy danh sách tất cả bàn (API này chắc chắn chạy được)
         const res = await http.get(`/tables`)
-
-        // Lấy mảng dữ liệu (tùy backend trả về dạng nào)
         const listTables = res.data?.data || res.data || res || [];
 
         if (!Array.isArray(listTables)) {
-          console.error("API không trả về mảng:", res);
           return null;
         }
 
-        // Tìm bàn có ID trùng khớp
         const target = listTables.find(t => t._id === tableId);
-
-        if (!target) throw new Error("Không tìm thấy bàn trong danh sách");
+        if (!target) throw new Error("Không tìm thấy bàn");
 
         return target;
       } catch (err) {
-        console.error("Lỗi tìm bàn:", err);
         throw err;
       }
     },
@@ -46,13 +37,11 @@ const GuestLogin = () => {
     retry: 1
   })
 
-  // --- XỬ LÝ HIỂN THỊ ---
   const getTableDisplay = () => {
     if (!tableId) return { text: 'Vui lòng quét mã QR', color: 'red', valid: false };
     if (isLoading) return { text: 'Đang xác thực bàn...', color: 'blue', valid: false };
     if (isError || !foundTable) return { text: 'Bàn không tồn tại!', color: 'red', valid: false };
 
-    // Lấy tên bàn
     const name = foundTable.table_name || foundTable.name || 'Bàn ???';
     return { text: name, color: 'green', valid: true };
   }
@@ -85,7 +74,45 @@ const GuestLogin = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4 relative">
+
+      {/* --- NÚT ĐĂNG NHẬP / ĐĂNG KÝ (FIX LỖI RESET) --- */}
+      <div className="absolute top-6 right-6 z-10">
+        <button
+          onClick={() => {
+            // 1. Lấy ID bàn hiện tại ra biến tạm
+            const currentTableId = tableId || localStorage.getItem('currentTableId');
+
+            // 2. CỰC KỲ QUAN TRỌNG: Xóa sạch toàn bộ LocalStorage
+            // Dùng lệnh clear() để đảm bảo không sót bất kỳ token nào
+            localStorage.clear();
+
+            // 3. Lưu lại mỗi cái Table ID thôi (để sau này còn biết bàn nào)
+            if (currentTableId) {
+              localStorage.setItem('currentTableId', currentTableId);
+            }
+
+            // 4. Chuyển hướng cứng sang trang Login
+            window.location.href = `/login?table_id=${currentTableId || ''}`;
+          }}
+          className="flex items-center gap-2 px-4 py-2 bg-white text-orange-600 font-semibold rounded-full shadow-sm hover:shadow-md hover:bg-orange-50 transition-all border border-orange-100 cursor-pointer"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18" height="18"
+            viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2"
+            strokeLinecap="round" strokeLinejoin="round"
+          >
+            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+
+          <span className="text-sm">Đăng nhập / Đăng ký</span>
+        </button>
+      </div>
+      {/* --------------------------------------------------- */}
+
       <Card className="w-full max-w-md shadow-xl rounded-2xl border-t-4 border-t-orange-500">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-extrabold text-orange-600 m-0">Flareon</h1>
@@ -94,9 +121,8 @@ const GuestLogin = () => {
 
         <Form name="guest_login" onFinish={onFinish} layout="vertical" size="large">
 
-          {/* --- KHUNG HIỂN THỊ TÊN BÀN --- */}
           <div className={`p-4 rounded-xl mb-6 text-center border-2 ${statusColor === 'green' ? 'bg-green-50 border-green-200' :
-              statusColor === 'red' ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-200'
+            statusColor === 'red' ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-200'
             }`}>
             <p className="text-gray-500 text-xs uppercase tracking-wide mb-1 font-bold">Vị trí ngồi</p>
             <div className={`text-xl font-bold flex items-center justify-center gap-2 ${statusColor === 'green' ? 'text-green-700' : statusColor === 'red' ? 'text-red-600' : 'text-blue-600'
