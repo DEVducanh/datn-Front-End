@@ -1,7 +1,6 @@
 import React from 'react';
-import dayjs from 'dayjs'; // Đảm bảo đã cài: npm i dayjs
+import dayjs from 'dayjs';
 
-// Component hiển thị số sao
 const StarRating = ({ rating }) => {
     return (
         <div className="flex items-center">
@@ -20,15 +19,10 @@ const StarRating = ({ rating }) => {
     );
 };
 
-// Component hiển thị nội dung bình luận
 const CommentCard = ({ review }) => {
-    // 1. Lấy thông tin người dùng (Xử lý trường hợp null/khách vãng lai)
     const user = review.user_id || {};
     const authorName = user.username || user.name || 'Khách ẩn danh';
-    // Avatar mặc định nếu không có
     const avatarUrl = user.avatar || 'https://cdn-icons-png.flaticon.com/512/149/149071.png';
-
-    // 2. Format thời gian (VD: 17/12/2025 10:30)
     const timeDisplay = review.createdAt ? dayjs(review.createdAt).format('DD/MM/YYYY HH:mm') : '';
 
     return (
@@ -43,16 +37,8 @@ const CommentCard = ({ review }) => {
                     <span className="font-bold text-gray-800">{authorName}</span>
                     <span className="text-xs text-gray-400">{timeDisplay}</span>
                 </div>
-
                 <StarRating rating={review.rating} />
-
                 <p className="my-2 text-gray-700">{review.comment}</p>
-
-                {/* Phần phản hồi (Reply) có thể mở rộng sau này */}
-                {/* <div className="text-sm text-gray-600 flex items-center gap-1 cursor-pointer hover:text-blue-500">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
-                    <span>Phản hồi</span>
-                </div> */}
             </div>
         </div>
     );

@@ -13,10 +13,11 @@ import CategoryPage from '@/pages/client/CategoryPage'
 import CartPage from '@/pages/client/CartPage'
 import FoodDetailPage from '@/pages/client/FoodDetailPage'
 import OrderPage from '@/pages/client/OrderPage'
+import FeedbackPage from '@/pages/client/Feedback' // <--- IMPORT TRANG ĐÁNH GIÁ
 
 import Login from '@/pages/client/Login'
 import Register from '@/pages/client/Register'
-import GuestLogin from '@/pages/client/GuestLogin' // <--- 1. Import trang GuestLogin
+import GuestLogin from '@/pages/client/GuestLogin'
 
 // Admin pages
 import CategoryManagement from '@/pages/admin/CategoryManagement'
@@ -84,6 +85,10 @@ const AppRoutes = () => {
           <Route path="contact" element={<ContactPage />} />
           <Route path="invoices/:id" element={<InvoiceDetailPage />} />
           <Route path="payment/result" element={<PaymentResult />} />
+
+          {/* --- ROUTE ĐÁNH GIÁ (MỚI) --- */}
+          <Route path="feedback/:orderId" element={<FeedbackPage />} />
+          {/* --------------------------- */}
 
           <Route element={<ProtectedRoute />}>
             <Route path="cart" element={<CartPage />} />

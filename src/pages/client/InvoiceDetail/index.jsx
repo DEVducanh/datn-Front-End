@@ -36,56 +36,38 @@ const InvoiceDetailPage = () => {
   }
 
   // --- XỬ LÝ DỮ LIỆU HIỂN THỊ ---
-  const { tableName, allItems, customerName, paymentMethod } = useMemo(() => {
+  const { tableName, allItems, customerName, paymentMethod, finalTotal } = useMemo(() => {
     if (!invoice)
-      return { tableName: '...', allItems: [], customerName: '...', paymentMethod: '...' }
+      return { tableName: '...', allItems: [], customerName: '...', paymentMethod: '...', finalTotal: 0 }
 
-    // 1. Tên bàn
+    // Logic lấy tên bàn, tên khách, phương thức thanh toán (giữ nguyên như cũ)
     let tName = 'Mang về / Khác'
     if (invoice.table) tName = invoice.table.name || invoice.table.table_name || invoice.table
-    else if (invoice.table_id)
-      tName = invoice.table_id.name || invoice.table_id.table_name || invoice.table_id
+    else if (invoice.table_id) tName = invoice.table_id.name || invoice.table_id.table_name || invoice.table_id
 
-    // 2. Tên khách
     let cName = 'Khách vãng lai'
     const userObj = invoice.user_id || invoice.user
     if (userObj && typeof userObj === 'object') {
       cName = userObj.username || userObj.name || userObj.full_name || userObj.email || cName
     }
-    if (cName === 'Khách vãng lai') {
-      try {
-        const localUser = JSON.parse(localStorage.getItem('user_info') || '{}')
-        if (localUser.username || localUser.name) cName = localUser.username || localUser.name
-      } catch (e) {}
-    }
 
-    // 3. Phương thức thanh toán (ĐÃ CẬP NHẬT LOGIC FALLBACK)
     let method = ''
-
-    // Tìm dữ liệu thực tế
     if (invoice.payment && invoice.payment.method) method = invoice.payment.method
     else if (invoice.transaction && invoice.transaction.type) method = invoice.transaction.type
     else if (invoice.payment_method) method = invoice.payment_method
 
-    // Chuẩn hóa
     const mUpper = String(method).toUpperCase()
-
     if (mUpper.includes('CASH') || mUpper.includes('TIEN')) method = 'Tiền mặt'
     else if (mUpper.includes('VNPAY') || mUpper.includes('QR')) method = 'VNPay / QR'
     else if (mUpper.includes('TRANSFER') || mUpper.includes('CK')) method = 'Chuyển khoản'
 
-    // --- QUAN TRỌNG: NẾU VẪN CHƯA CÓ DỮ LIỆU ---
-    // Nếu trạng thái là PAID (Đã thanh toán) mà không rõ phương thức -> Mặc định là Tiền mặt
-    if (
-      (!method || method === '') &&
-      ['paid', 'completed'].includes(String(invoice.status).toLowerCase())
-    ) {
+    if ((!method || method === '') && ['paid', 'completed'].includes(String(invoice.status).toLowerCase())) {
       method = 'Tiền mặt'
     } else if (!method) {
       method = 'Chưa thanh toán'
     }
 
-    // 4. Món ăn
+    // --- LẤY DANH SÁCH MÓN ---
     let items = []
     if (invoice.order_item && Array.isArray(invoice.order_item)) {
       items = invoice.order_item.map((item) => ({
@@ -94,14 +76,21 @@ const InvoiceDetailPage = () => {
         order_id_ref: Array.isArray(invoice.order_id) ? invoice.order_id[0] : invoice.order_id,
       }))
     } else if (invoice.order_id) {
-      // Fallback logic cũ
       const rawOrder = invoice.order_id
       const extractItems = (ord) => ord.items || ord.dishes || ord.products || ord.order_items || []
       if (Array.isArray(rawOrder)) items = rawOrder.flatMap((order) => extractItems(order))
       else if (typeof rawOrder === 'object') items = extractItems(rawOrder)
     }
 
-    return { tableName: tName, allItems: items, customerName: cName, paymentMethod: method }
+    // --- TÍNH TỔNG TIỀN MỚI (CHỈ CỘNG MÓN CHƯA HỦY) ---
+    // Backend đã tính rồi, nhưng Frontend tính lại cho chắc chắn khi hiển thị
+    const calculatedTotal = items.reduce((sum, item) => {
+      const isCancelled = item.status === 'Cancelled' || item.status === 'cancelled';
+      if (isCancelled) return sum;
+      return sum + (item.price * item.quantity);
+    }, 0);
+
+    return { tableName: tName, allItems: items, customerName: cName, paymentMethod: method, finalTotal: calculatedTotal }
   }, [invoice])
 
   const columns = [
@@ -111,18 +100,40 @@ const InvoiceDetailPage = () => {
       render: (_, record) => {
         let name = record.name || record.dish_name
         if (!name && record.dish_id) name = record.dish_id.name || record.dish_id.dish_name
-        return <span className="font-medium text-gray-800">{name || 'Món ăn'}</span>
+
+        // --- KIỂM TRA TRẠNG THÁI HỦY ---
+        const isCancelled = record.status === 'Cancelled' || record.status === 'cancelled';
+
+        return (
+          <div className="flex flex-col">
+            <span className={`font-medium ${isCancelled ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+              {name || 'Món ăn'}
+            </span>
+            {/* HIỂN THỊ LÝ DO HỦY */}
+            {isCancelled && (
+              <div className="text-xs text-red-500 mt-1">
+                [Đã hủy] - Lý do: {record.cancellation_reason || 'Không có lý do'}
+                {record.canceled_by && <span> (Bởi: {record.canceled_by === 'kitchen' ? 'Nhà bếp' : 'Khách'})</span>}
+              </div>
+            )}
+          </div>
+        )
       },
     },
     { title: 'SL', dataIndex: 'quantity', width: 50, align: 'center', render: (q) => <b>x{q}</b> },
     {
       title: 'Thành tiền',
       align: 'right',
-      render: (_, r) => (
-        <span className="text-orange-600 font-bold">
-          {(r.price * r.quantity).toLocaleString()}đ
-        </span>
-      ),
+      render: (_, r) => {
+        const isCancelled = r.status === 'Cancelled' || r.status === 'cancelled';
+        if (isCancelled) return <span className="text-gray-400 italic">0đ</span>; // Món hủy hiện 0đ
+
+        return (
+          <span className="text-orange-600 font-bold">
+            {(r.price * r.quantity).toLocaleString()}đ
+          </span>
+        )
+      },
     },
     {
       title: '',
@@ -130,6 +141,9 @@ const InvoiceDetailPage = () => {
       align: 'right',
       width: 80,
       render: (_, record) => {
+        const isCancelled = record.status === 'Cancelled' || record.status === 'cancelled';
+        if (isCancelled) return null; // Món hủy không cho đánh giá
+
         let dishId = record.dish_id?._id || record.dish_id
         let dishName = record.name || record.dish_name
         return (
@@ -147,12 +161,7 @@ const InvoiceDetailPage = () => {
     },
   ]
 
-  if (isLoading)
-    return (
-      <div className="flex justify-center p-12">
-        <Spin size="large" />
-      </div>
-    )
+  if (isLoading) return <div className="flex justify-center p-12"><Spin size="large" /></div>
   if (isError) return <Alert message="Lỗi tải hóa đơn" className="m-8" type="error" />
 
   return (
@@ -174,9 +183,7 @@ const InvoiceDetailPage = () => {
 
           <div className="grid grid-cols-2 gap-y-3 text-sm border-b pb-6 mb-6">
             <span className="text-gray-500">Ngày tạo:</span>
-            <span className="text-right font-medium">
-              {new Date(invoice.createdAt).toLocaleString('vi-VN')}
-            </span>
+            <span className="text-right font-medium">{new Date(invoice.createdAt).toLocaleString('vi-VN')}</span>
 
             <span className="text-gray-500">Khách hàng:</span>
             <span className="text-right font-bold text-blue-600 uppercase">{customerName}</span>
@@ -197,12 +204,17 @@ const InvoiceDetailPage = () => {
             size="small"
             rowKey="_id"
             bordered
+            // Tô màu nền đỏ nhạt cho dòng bị hủy
+            rowClassName={(record) =>
+              (record.status === 'Cancelled' || record.status === 'cancelled') ? 'bg-red-50' : ''
+            }
           />
 
           <div className="flex justify-between items-center mt-6 pt-4 border-t">
             <span className="text-lg font-bold text-gray-700">Tổng cộng</span>
             <span className="text-2xl font-extrabold text-red-600">
-              {invoice.total_amount?.toLocaleString()}đ
+              {/* Hiển thị tổng tiền mới đã trừ món hủy */}
+              {finalTotal.toLocaleString()}đ
             </span>
           </div>
         </div>

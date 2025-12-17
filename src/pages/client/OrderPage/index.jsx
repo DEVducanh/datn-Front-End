@@ -9,6 +9,7 @@ import {
   DeleteOutlined,
   FileDoneOutlined,
   SmileOutlined,
+  StarOutlined
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import http from '@/apis/http'
@@ -52,6 +53,9 @@ const OrderPage = () => {
   const [isPaymentModalVisible, setIsPaymentModalVisible] = useState(false)
   const [currentTableId, setCurrentTableId] = useState(null)
   const [isPaidSuccess, setIsPaidSuccess] = useState(false)
+
+  // State lưu ID đơn hàng vừa thanh toán xong để chuyển sang trang đánh giá
+  const [lastPaidOrderId, setLastPaidOrderId] = useState(null)
 
   const [modalApi, modalContextHolder] = Modal.useModal()
   const [messageApi, contextHolder] = message.useMessage()
@@ -113,6 +117,10 @@ const OrderPage = () => {
 
         if (hasPaidOrder && allPaid && fetchedOrders.length > 0) {
           setIsPaidSuccess(true)
+          // Lưu lại ID đơn hàng cuối cùng (hoặc đầu tiên) để dùng cho trang đánh giá
+          if (fetchedOrders[0]) {
+            setLastPaidOrderId(fetchedOrders[0]._id)
+          }
         } else {
           setIsPaidSuccess(false)
         }
@@ -166,7 +174,7 @@ const OrderPage = () => {
     setIsPaymentModalVisible(true)
   }
 
-  // --- HÀM HỦY MÓN (CÓ NHẬP LÝ DO) ---
+  // --- HÀM HỦY MÓN ---
   const handleCancelItem = (record) => {
     const { _id: itemId, status: currentStatus, dish_id, estimated_time } = record
     const dishName = dish_id?.dish_name || 'món này'
@@ -183,7 +191,6 @@ const OrderPage = () => {
       return
     }
 
-    // Nếu đang nấu mà chưa trễ giờ -> Chặn
     if (currentStatus === 'Processing' && !isLate) {
       messageApi.warning(`Bếp đang nấu đúng tiến độ. Không thể hủy!`)
       return
@@ -222,9 +229,7 @@ const OrderPage = () => {
         }
 
         try {
-          // Gọi API hủy kèm lý do (note)
           await http.patch(`${BASE_ORDER_ITEM_URL}/${itemId}/cancel`, { note: cancelReason })
-
           fetchOrdersAndItems(currentTableId, true)
           messageApi.success(`Đã hủy món ${dishName}`)
         } catch (error) {
@@ -248,8 +253,6 @@ const OrderPage = () => {
       render: (dish, record) => {
         const name = dish?.dish_name || '---'
         const dishId = dish?._id || record.dish_id
-
-        // Tính toán hiển thị giờ dự kiến / trễ giờ
         const eta = record.estimated_time ? dayjs(record.estimated_time) : null
         const isLate = eta && dayjs().isAfter(eta) && record.status === 'Processing'
         const isCancelled = record.status === 'Cancelled'
@@ -265,12 +268,10 @@ const OrderPage = () => {
               {name}
             </span>
 
-            {/* Hiển thị note lý do hủy nếu có */}
             {isCancelled && record.note && (
               <span className="text-[10px] text-red-400 italic">Lý do: {record.note}</span>
             )}
 
-            {/* Hiển thị giờ dự kiến nếu đang chờ/nấu */}
             {['Pending', 'Processing'].includes(record.status) && eta && (
               <span
                 className={`text-xs mt-1 flex items-center gap-1 ${isLate ? 'text-red-500 font-bold' : 'text-gray-500'}`}
@@ -320,19 +321,11 @@ const OrderPage = () => {
       key: 'action',
       render: (_, r) => {
         const isFinished = [
-          'Shipped',
-          'Served',
-          'Cancelled',
-          'Paid',
-          'Processing',
-          'Completed',
-          'Ready',
+          'Shipped', 'Served', 'Cancelled', 'Paid', 'Processing', 'Completed', 'Ready',
         ].includes(r.status)
         const isProcessing = r.status === 'Processing'
         const eta = r.estimated_time ? dayjs(r.estimated_time) : null
         const isLate = eta && dayjs().isAfter(eta)
-
-        // Được phép xóa nếu: Chưa xong VÀ (Không phải đang nấu HOẶC Đã quá giờ)
         const canDelete = !isFinished && (!isProcessing || isLate)
 
         if (!canDelete) return null
@@ -356,25 +349,44 @@ const OrderPage = () => {
     },
   ]
 
-  // --- TÍNH TỔNG TIỀN (TRỪ MÓN HỦY) ---
   const totalBill = items.reduce((sum, item) => {
-    if (item.status === 'Cancelled') return sum // Không cộng tiền món hủy
+    if (item.status === 'Cancelled') return sum
     return sum + item.price * item.quantity
   }, 0)
 
   if (!currentTableId)
     return <div className="p-10 text-center text-red-500">Vui lòng quét mã QR.</div>
 
-  // Màn hình cảm ơn
+  // --- MÀN HÌNH THANH TOÁN THÀNH CÔNG ---
   if (isPaidSuccess && items.length === 0) {
     return (
       <div style={{ padding: '40px 24px', maxWidth: 1000, margin: '0 auto', textAlign: 'center' }}>
         <Result
           icon={<SmileOutlined style={{ color: '#52c41a' }} />}
           title="Cảm ơn quý khách đã sử dụng dịch vụ!"
-          subTitle="Đơn hàng đã được thanh toán hoàn tất. Hẹn gặp lại quý khách."
+          subTitle="Đơn hàng đã được thanh toán hoàn tất."
           extra={[
-            <Button type="primary" key="back" onClick={() => (window.location.href = '/')}>
+            // NÚT ĐÁNH GIÁ (MỚI)
+            <Button
+              key="feedback"
+              type="primary"
+              size="large"
+              icon={<StarOutlined />}
+              className="bg-orange-500 hover:bg-orange-400"
+              onClick={() => {
+                if (lastPaidOrderId) {
+                  navigate(`/flareon/feedback/${lastPaidOrderId}`)
+                } else {
+                  message.warning("Không tìm thấy đơn hàng để đánh giá!")
+                  navigate('/flareon')
+                }
+              }}
+            >
+              Đánh giá món ăn
+            </Button>,
+
+            // Nút về trang chủ
+            <Button key="back" size="large" onClick={() => (window.location.href = '/flareon')}>
               Về trang chủ
             </Button>,
           ]}
@@ -416,14 +428,12 @@ const OrderPage = () => {
             <Text strong className="text-lg">
               Tạm tính:
             </Text>
-            {/* Tổng tiền chuẩn (đã trừ hủy) */}
             <Text strong className="text-2xl text-orange-600">
               {totalBill.toLocaleString()} VNĐ
             </Text>
           </div>
 
           <div className="mt-6 text-center">
-            {/* Nút thanh toán bị vô hiệu hóa nếu chỉ còn toàn món hủy */}
             <Button
               type="primary"
               size="large"
@@ -439,7 +449,6 @@ const OrderPage = () => {
       )}
 
       <PaymentModal
-        // Chỉ truyền sang modal những món chưa hủy để tính toán
         items={items.filter((i) => i.status !== 'Cancelled')}
         visible={isPaymentModalVisible}
         onClose={() => setIsPaymentModalVisible(false)}
