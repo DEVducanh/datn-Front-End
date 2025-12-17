@@ -10,7 +10,7 @@ import {
   FilterOutlined,
   PlusOutlined,
   SearchOutlined,
-  SyncOutlined // Icon refresh
+  SyncOutlined, // Icon refresh
 } from '@ant-design/icons'
 
 import OrderModalEdit from './modalEdit'
@@ -25,7 +25,7 @@ const STATUS_LABELS = {
   Served: 'Đã phục vụ',
   Completed: 'Hoàn thành',
   Cancelled: 'Đã hủy',
-  Paid: 'Đã thanh toán'
+  Paid: 'Đã thanh toán',
 }
 
 const STATUS_COLORS = {
@@ -36,7 +36,7 @@ const STATUS_COLORS = {
   Served: 'green',
   Completed: 'green',
   Cancelled: 'red',
-  Paid: 'magenta'
+  Paid: 'magenta',
 }
 
 const orderItemAPI = {
@@ -45,7 +45,10 @@ const orderItemAPI = {
       const token = localStorage.getItem('token')
       const url = `${import.meta.env.VITE_API_URL || 'https://api-datn-orderfood-backend-2.onrender.com'}/order-item/order/${orderId}`
       const response = await axios.get(url, {
-        headers: { 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: token ? `Bearer ${token}` : '',
+        },
       })
       return response.data || {}
     } catch (error) {
@@ -87,8 +90,8 @@ const OrderManagement = () => {
 
     // 👇 CẤU HÌNH QUAN TRỌNG NHẤT 👇
     refetchInterval: 3000, // Tự động gọi lại API mỗi 3 giây
-    staleTime: 0,          // Luôn coi dữ liệu là cũ để bắt buộc lấy mới
-    cacheTime: 0,          // Không lưu cache
+    staleTime: 0, // Luôn coi dữ liệu là cũ để bắt buộc lấy mới
+    cacheTime: 0, // Không lưu cache
   })
 
   const { data: orderItemData, isLoading: isLoadingItems } = useQuery({
@@ -107,7 +110,7 @@ const OrderManagement = () => {
       message.success('Cập nhật thành công!')
       queryClient.invalidateQueries({ queryKey: ['orders'] })
     },
-    onError: () => message.error('Cập nhật thất bại!')
+    onError: () => message.error('Cập nhật thất bại!'),
   })
 
   const { mutate: deleteOrder } = useMutation({
@@ -116,7 +119,7 @@ const OrderManagement = () => {
       message.success('Xóa thành công!')
       queryClient.invalidateQueries({ queryKey: ['orders'] })
     },
-    onError: () => message.error('Xóa thất bại!')
+    onError: () => message.error('Xóa thất bại!'),
   })
 
   const handleSearch = (value) => setSearchtext(value)
@@ -125,14 +128,71 @@ const OrderManagement = () => {
     updateOrder({ id: orderId, data: value })
     setModalOpen(false)
   }
-  const handleOpenModal = (order) => { setSelectedOrder(order); setModalOpen(true) }
-  const handleOpenDetailModal = (order) => { setSelectedOrder(order); setDetailOrderId(order._id); setModalDetailOpen(true) }
-  const handleCancel = () => { setModalOpen(false); setModalDetailOpen(false); setSelectedOrder(null); setDetailOrderId(null) }
+  const handleOpenModal = (order) => {
+    setSelectedOrder(order)
+    setModalOpen(true)
+  }
+  const handleOpenDetailModal = (order) => {
+    setSelectedOrder(order)
+    setDetailOrderId(order._id)
+    setModalDetailOpen(true)
+  }
+  const handleCancel = () => {
+    setModalOpen(false)
+    setModalDetailOpen(false)
+    setSelectedOrder(null)
+    setDetailOrderId(null)
+  }
 
   const columns = [
-    { title: 'Mã đơn', dataIndex: '_id', key: '_id', render: (v) => <span className="font-medium">#{v.slice(-6)}</span> },
-    { title: 'Bàn', key: 'table_name', render: (record) => record.table?.table_name || 'Chưa có bàn' },
-    { title: 'Khách hàng', key: 'username', render: (record) => record.user?.username || 'Khách lẻ' },
+    {
+      title: 'Mã đơn',
+      dataIndex: '_id',
+      key: '_id',
+      render: (v) => <span className="font-medium">#{v.slice(-6)}</span>,
+    },
+    {
+      title: 'Bàn',
+      key: 'table_name',
+      render: (record) => record.table?.table_name || 'Chưa có bàn',
+    },
+    {
+      title: 'Khách hàng',
+      key: 'customer_info',
+      render: (_, record) => {
+        // 👇 IN RA ĐỂ KIỂM TRA (F12 -> Console)
+        console.log('Soi đơn hàng:', record._id)
+        console.log('-- Guest Info:', record.guest_info)
+        console.log('-- User Info:', record.user_info)
+        console.log('-- Toàn bộ record:', record)
+
+        // 1. Cố gắng tìm trong guest_info (Thường backend lưu ở đây)
+        let guestName =
+          record.guest_info?.name || record.guest_info?.username || record.guest_info?.fullname
+        let guestPhone = record.guest_info?.phone || record.guest_info?.phoneNumber
+
+        // 2. Nếu không có, thử tìm trong các biến thể khác (shipping, receiver...)
+        if (!guestName) {
+          guestName = record.shippingAddress?.name || record.receiver_name || record.full_name
+          guestPhone = record.shippingAddress?.phone || record.receiver_phone || record.phone
+        }
+
+        // 3. Cuối cùng mới lấy User đăng ký
+        const userName = record.user?.username || record.user?.name
+        const userPhone = record.user?.phone
+
+        // CHỐT: Ưu tiên Guest -> User -> Mặc định
+        const finalName = guestName || userName || 'Khách vãng lai'
+        const finalPhone = guestPhone || userPhone || ''
+
+        return (
+          <div className="flex flex-col">
+            <span className="font-bold text-gray-700">{finalName}</span>
+            {finalPhone && <span className="text-xs text-gray-500">{finalPhone}</span>}
+          </div>
+        )
+      },
+    },
     {
       title: 'Trạng thái',
       dataIndex: 'status',
@@ -147,18 +207,36 @@ const OrderManagement = () => {
       title: 'Hành động',
       key: 'action',
       render: (_, record) => {
+        // Kiểm tra xem đơn hàng đã kết thúc chưa
         const isFinalized = ['Cancelled', 'Completed', 'Paid'].includes(record.status)
+
         if (isFinalized) {
+          // TRƯỚC ĐÂY: Hiện nút Xóa
+          // BÂY GIỜ: Thay bằng nút Xem Chi Tiết
           return (
-            <Button type="primary" danger icon={<DeleteOutlined />} onClick={() => {
-              confirm({ title: 'Xác nhận xóa?', content: 'Bạn có chắc chắn?', okText: 'Xóa', okType: 'danger', cancelText: 'Hủy', onOk: async () => deleteOrder(record._id) })
-            }} />
+            <Button
+              type="default" // Hoặc type="primary" ghost nếu muốn viền xanh
+              icon={<EyeOutlined />} // Icon con mắt
+              onClick={() => handleOpenDetailModal(record)} // Mở modal chi tiết
+            >
+              {/* Có thể thêm chữ "Chi tiết" nếu muốn, hoặc để icon không */}
+            </Button>
           )
         }
+
+        // Nếu đơn chưa kết thúc -> Hiện cả Xem và Sửa
         return (
           <Space>
-            <Button type="default" icon={<EyeOutlined />} onClick={() => handleOpenDetailModal(record)} />
-            <Button type="primary" icon={<EditOutlined />} onClick={() => handleOpenModal(record)} />
+            <Button
+              type="default"
+              icon={<EyeOutlined />}
+              onClick={() => handleOpenDetailModal(record)}
+            />
+            <Button
+              type="primary"
+              icon={<EditOutlined />}
+              onClick={() => handleOpenModal(record)}
+            />
           </Space>
         )
       },
@@ -166,7 +244,10 @@ const OrderManagement = () => {
   ]
 
   const tableData = Array.isArray(data) ? data : data?.data || []
-  const orderItems = orderItemData?.data || orderItemData?.Orderitems || (Array.isArray(orderItemData) ? orderItemData : [])
+  const orderItems =
+    orderItemData?.data ||
+    orderItemData?.Orderitems ||
+    (Array.isArray(orderItemData) ? orderItemData : [])
 
   return (
     <div className="h-full overflow-auto">
@@ -178,8 +259,20 @@ const OrderManagement = () => {
       <Card className="shadow-sm rounded-2xl xl:col-span-2" title="Danh sách đơn hàng">
         <div className="mb-4 flex justify-between items-center flex-wrap gap-4">
           <Space>
-            <Input.Search placeholder="Tìm kiếm..." prefix={<SearchOutlined />} style={{ width: 260 }} onSearch={handleSearch} />
-            <Select placeholder="Lọc trạng thái" allowClear style={{ width: 180 }} suffixIcon={<FilterOutlined />} value={statusSelected} onChange={handleChange}>
+            <Input.Search
+              placeholder="Tìm kiếm..."
+              prefix={<SearchOutlined />}
+              style={{ width: 260 }}
+              onSearch={handleSearch}
+            />
+            <Select
+              placeholder="Lọc trạng thái"
+              allowClear
+              style={{ width: 180 }}
+              suffixIcon={<FilterOutlined />}
+              value={statusSelected}
+              onChange={handleChange}
+            >
               <Option value="Pending">Chờ xác nhận</Option>
               <Option value="Processing">Đang nấu</Option>
               <Option value="Ready">Món đã xong</Option>
@@ -190,13 +283,28 @@ const OrderManagement = () => {
             {/* Nút Refresh thủ công */}
             <Button icon={<SyncOutlined spin={isLoading} />} onClick={() => refetch()} />
           </Space>
-          <Button type="primary" icon={<PlusOutlined />}>Thêm đơn hàng</Button>
         </div>
-        <Table columns={columns} dataSource={tableData} rowKey={'_id'} pagination={{ pageSize: 10 }} className="rounded-xl" />
+        <Table
+          columns={columns}
+          dataSource={tableData}
+          rowKey={'_id'}
+          pagination={{ pageSize: 10 }}
+          className="rounded-xl"
+        />
       </Card>
-
-      <OrderModalDetail order={selectedOrder} open={modalDetailOpen} onCancel={handleCancel} orderItemsData={orderItems} isLoadingItems={isLoadingItems} />
-      <OrderModalEdit open={modalOpen} order={selectedOrder} onCancel={handleCancel} onSubmit={(value) => handleUpdate(value, selectedOrder?._id)} />
+      <OrderModalDetail
+        order={selectedOrder}
+        open={modalDetailOpen}
+        onCancel={handleCancel}
+        orderItemsData={orderItems}
+        isLoadingItems={isLoadingItems}
+      />
+      <OrderModalEdit
+        open={modalOpen}
+        order={selectedOrder}
+        onCancel={handleCancel}
+        onSubmit={(value) => handleUpdate(value, selectedOrder?._id)}
+      />
     </div>
   )
 }

@@ -91,13 +91,31 @@ const CustomBarChart = ({ data }) => {
 }
 
 // --- HÀM LẤY TÊN KHÁCH ---
+// --- HÀM LẤY TÊN KHÁCH (Đã nâng cấp) ---
 const getCustomerName = (record) => {
   if (!record) return 'Khách vãng lai'
-  const extractName = (obj) => obj?.name || obj?.full_name || obj?.username || obj?.email
-  if (record.user && typeof record.user === 'object') return extractName(record.user)
-  if (record.user_id && typeof record.user_id === 'object') return extractName(record.user_id)
+
+  // 1. Ưu tiên lấy từ object "user" ngay trong Invoice (Như ảnh API bạn gửi)
+  if (record.user && record.user.name && record.user.name !== 'string') {
+    return record.user.name
+  }
+
+  // 2. Kiểm tra các biến thể khác (đề phòng backend đổi tên)
+  if (record.user_id && (record.user_id.name || record.user_id.full_name)) {
+    return record.user_id.name || record.user_id.full_name
+  }
+
+  // 3. Kiểm tra nếu order_id đã được populate (Trường hợp Backend sửa lại populate)
+  // Xử lý cả trường hợp order_id là mảng hoặc object
   const order = Array.isArray(record.order_id) ? record.order_id[0] : record.order_id
-  if (order?.user && typeof order.user === 'object') return extractName(order.user)
+  if (order && typeof order === 'object') {
+    // Lấy guest_info trong order
+    if (order.guest_info && order.guest_info.name) return order.guest_info.name
+    // Lấy user trong order
+    if (order.user && order.user.name) return order.user.name
+  }
+
+  // 4. Nếu vẫn không thấy tên -> Trả về mặc định
   return 'Khách lẻ'
 }
 
@@ -172,10 +190,10 @@ const Dashboard = () => {
     )
 
     const actList = sortedInvoices.slice(0, 6).map((inv) => {
-      const name = getCustomerName(inv)
+      const name = getCustomerName(inv) // <--- Nó sẽ dùng logic mới ở trên
       return {
         id: inv._id,
-        user: name,
+        user: name, // Tên sẽ hiển thị đúng ở đây
         amount: inv.total_amount,
         time: timeAgo(inv.created_at || inv.createdAt),
         avatar: name.charAt(0).toUpperCase(),

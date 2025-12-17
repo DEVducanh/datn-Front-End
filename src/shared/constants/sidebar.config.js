@@ -34,12 +34,6 @@ export const MENU = [
     icon: CreditCard,
   },
   { key: 'reviews', label: 'Đánh giá', path: '/admin/reviews', icon: MessageSquareHeart },
-  {
-    key: 'staffs',
-    label: 'Nhân viên',
-    path: '/admin/staffs',
-    icon: Contact,
-    roles: ['admin', 'manager'],
-  },
+
   { key: 'users', label: 'Người dùng', path: '/admin/users', icon: UsersRound, roles: ['admin'] },
 ]
