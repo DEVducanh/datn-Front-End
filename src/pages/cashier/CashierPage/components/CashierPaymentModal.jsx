@@ -2,14 +2,14 @@ import React from 'react'
 import { Modal, Button, Descriptions, message, Tag, Table, Divider } from 'antd'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import http from '@/apis/http'
-import { DollarOutlined, CheckCircleOutlined, SolutionOutlined } from '@ant-design/icons'
+import { CheckCircleOutlined, SolutionOutlined, ClockCircleOutlined } from '@ant-design/icons'
 
 const formatVnd = (n) => (n || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + 'đ'
 
 const CashierPaymentModal = ({ isOpen, onClose, order }) => {
   const queryClient = useQueryClient()
 
-  // --- 1. LẤY CHI TIẾT MÓN ĂN (ĐÃ LỌC BỎ MÓN HỦY) ---
+  // --- 1. LẤY CHI TIẾT MÓN ĂN ---
   const { data: orderItems = [], isLoading } = useQuery({
     queryKey: ['cashier-order-items', order?._id],
     queryFn: async () => {
@@ -21,24 +21,24 @@ const CashierPaymentModal = ({ isOpen, onClose, order }) => {
       else if (res.data && Array.isArray(res.data)) items = res.data
       else if (res.Orderitems) items = res.Orderitems
 
-      // --- LỌC BỎ MÓN HỦY ---
+      // Lọc bỏ món hủy
       return items.filter((item) => item.status !== 'Cancelled')
     },
     enabled: !!order?._id && isOpen,
   })
 
-  // --- 2. LOGIC THANH TOÁN (GIỮ NGUYÊN) ---
+  // --- 2. LOGIC CẬP NHẬT TRẠNG THÁI CUỐI CÙNG (PAID) ---
   const updateToPaidMutation = useMutation({
     mutationFn: async () => {
-      console.log('Đang cập nhật trạng thái sang Paid...')
-      await http.patch(`/orders/${order._id}/status`, { status: 'Paid' })
+      // Cập nhật thành PAID
+      await http.patch(`/orders/${order._id}`, { status: 'Paid' })
 
-      // Update bàn thành trống
+      // Giải phóng bàn
       const tableId = order.table_id?._id || order.table_id
       if (tableId && String(tableId).length === 24) {
         try {
           await http.patch(`/tables/${tableId}`, { status: 'empty' })
-        } catch (e) {}
+        } catch (e) { }
       }
     },
     onSuccess: () => {
@@ -47,34 +47,55 @@ const CashierPaymentModal = ({ isOpen, onClose, order }) => {
       queryClient.invalidateQueries(['tables'])
       onClose()
     },
-    onError: () => message.warning('Lỗi cập nhật trạng thái.'),
+    onError: (error) => {
+      console.error("Lỗi update Paid:", error);
+      message.warning('Đã thu tiền nhưng lỗi cập nhật trạng thái.');
+    },
   })
 
+  // --- 3. LOGIC TẠO HÓA ĐƠN ---
   const createInvoiceMutation = useMutation({
     mutationFn: (payload) => http.post('/invoices', payload),
-    onSuccess: () => updateToPaidMutation.mutate(),
-    onError: (err) => message.error(err.response?.data?.message || 'Lỗi tạo hóa đơn.'),
+    onSuccess: () => {
+      // Tạo hóa đơn xong thì mới chuyển sang Paid
+      updateToPaidMutation.mutate()
+    },
+    onError: (err) => {
+      console.error("Lỗi tạo hóa đơn:", err);
+      message.error(err.response?.data?.message || 'Lỗi tạo hóa đơn.');
+    },
   })
 
+  // --- 4. HÀM XỬ LÝ CHÍNH (ĐÃ SỬA LOGIC "COMPLETED") ---
   const handleConfirmPayment = async () => {
     if (!order) return
     try {
+      // BƯỚC 1: QUAN TRỌNG - Kiểm tra nếu chưa Completed thì phải ép sang Completed
+      // Vì Backend yêu cầu phải Completed mới cho tạo hóa đơn
       if (order.status !== 'Completed') {
-        await http.patch(`/orders/${order._id}/status`, { status: 'Completed' })
+        try {
+          // Gọi API update status -> Completed
+          await http.patch(`/orders/${order._id}`, { status: 'Completed' })
+        } catch (err) {
+          console.log("Lỗi ép trạng thái Completed (có thể bỏ qua nếu BE tự xử lý):", err)
+        }
       }
 
-      // Tính lại tổng tiền thực tế từ danh sách món đã lọc (Optional nhưng an toàn hơn)
+      // BƯỚC 2: Tính toán tiền nong
       const realTotal =
         orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0) || order.total_price
 
+      // BƯỚC 3: Tạo hóa đơn
       const payload = {
         order_id: order._id,
         method: 'Cash',
         amount: realTotal,
       }
       createInvoiceMutation.mutate(payload)
+
     } catch (error) {
-      message.error('Lỗi hệ thống.')
+      console.error("Lỗi hệ thống:", error)
+      message.error('Lỗi hệ thống khi xử lý thanh toán.')
     }
   }
 
@@ -95,6 +116,15 @@ const CashierPaymentModal = ({ isOpen, onClose, order }) => {
   ]
 
   if (!order) return null
+
+  // Check trạng thái hiển thị
+  const isPaymentRequested =
+    order.status === 'PAYMENT_PENDING' ||
+    order.status === 'Pending Payment' ||
+    order.payment_status === 'PAYMENT_PENDING' ||
+    order.status === 'WAITING_FOR_PAYMENT';
+
+  const isPaid = order.status === 'Paid';
 
   return (
     <Modal
@@ -123,7 +153,10 @@ const CashierPaymentModal = ({ isOpen, onClose, order }) => {
               <span className="text-xl font-bold text-red-600">{formatVnd(order.total_price)}</span>
             </Descriptions.Item>
             <Descriptions.Item label="Trạng thái">
-              <Tag color="blue">{order.status}</Tag>
+              {isPaid ? <Tag color="green">Đã thanh toán</Tag> :
+                isPaymentRequested ? <Tag color="orange" icon={<ClockCircleOutlined />}>Khách gọi t.toán</Tag> :
+                  <Tag color="blue">{order.status}</Tag>
+              }
             </Descriptions.Item>
           </Descriptions>
         </div>
@@ -135,14 +168,13 @@ const CashierPaymentModal = ({ isOpen, onClose, order }) => {
         {/* Bảng món ăn */}
         <div className="max-h-[300px] overflow-y-auto border rounded-md">
           <Table
-            dataSource={orderItems} // Dữ liệu đã lọc bỏ món hủy
+            dataSource={orderItems}
             columns={columns}
             rowKey={(r) => r._id || Math.random()}
             pagination={false}
             loading={isLoading}
             size="small"
             summary={() => (
-              // Hiện tổng tiền thực tế dưới chân bảng
               <Table.Summary.Row className="bg-gray-50">
                 <Table.Summary.Cell index={0} colSpan={3} className="text-right font-bold">
                   Tổng cộng:
@@ -160,16 +192,27 @@ const CashierPaymentModal = ({ isOpen, onClose, order }) => {
           <Button size="large" onClick={onClose}>
             Đóng
           </Button>
+
           <Button
             type="primary"
             size="large"
-            className="bg-green-600 hover:!bg-green-500 border-none h-12 text-lg font-bold min-w-[180px]"
+            className={`${!isPaid && isPaymentRequested
+              ? 'bg-green-600 hover:!bg-green-500'
+              : 'bg-gray-400'
+              } border-none h-12 text-lg font-bold min-w-[180px]`}
             icon={<CheckCircleOutlined />}
+
+            // Loading khi đang tạo hóa đơn HOẶC đang update paid
             loading={createInvoiceMutation.isPending || updateToPaidMutation.isPending}
+
             onClick={handleConfirmPayment}
-            disabled={order.status === 'Paid'}
+            disabled={isPaid || !isPaymentRequested}
           >
-            {order.status === 'Paid' ? 'Đã thu tiền' : 'Xác nhận thu tiền'}
+            {isPaid
+              ? 'Đã thu tiền'
+              : !isPaymentRequested
+                ? 'Chưa yêu cầu'
+                : 'Xác nhận thu tiền'}
           </Button>
         </div>
       </div>
