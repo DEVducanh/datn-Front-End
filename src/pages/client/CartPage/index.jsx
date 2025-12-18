@@ -6,21 +6,23 @@ import { useNavigate } from 'react-router'
 import CartItem from './CartItem'
 import { useMessage } from '@/contexts/MessageProvider'
 
+// 1. Import Modal và Icon
+import { Modal } from 'antd'
+import { ExclamationCircleOutlined, DeleteOutlined } from '@ant-design/icons'
+
 const CartPage = () => {
   const message = useMessage()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
-  // --- 1. LOGIC LẤY ID ---
-  const mongoTableId = localStorage.getItem('currentTableId')
+  // 2. KHỞI TẠO HOOK MODAL (Cách chuẩn để không bị lỗi context)
+  const [modal, contextHolder] = Modal.useModal()
 
+  // --- LOGIC LẤY ID ---
+  const mongoTableId = localStorage.getItem('currentTableId')
   const userString = localStorage.getItem('user') || localStorage.getItem('user_info')
   const userData = userString ? JSON.parse(userString) : {}
-
-  // Lấy _id (User thường) hoặc id (Guest)
   const userId = userData?._id || userData?.id
-
-  // console.log("CartPage Check:", { mongoTableId, userId })
 
   const [isCheckingOut, setIsCheckingOut] = useState(false)
 
@@ -35,7 +37,6 @@ const CartPage = () => {
   } = useQuery({
     queryKey: ['cart', mongoTableId],
     queryFn: async () => {
-      // Đường dẫn chuẩn: /cart/cart-item/MÃ_BÀN
       const res = await http.get(`/cart/cart-item/${mongoTableId}`)
       return res?.data
     },
@@ -62,7 +63,7 @@ const CartPage = () => {
     mutationFn: (cartItemIdToDelete) => http.delete(`/cart/item/${cartItemIdToDelete}`),
     onSuccess: () => {
       queryClient.invalidateQueries(['cart', mongoTableId])
-      message.success('Xóa món ăn thành công!')
+      message.success('Đã xóa món ăn khỏi giỏ hàng!')
     },
     onError: () => message.error('Có lỗi xảy ra khi xóa món ăn.'),
   })
@@ -77,11 +78,28 @@ const CartPage = () => {
     updateQuantityMutation.mutate({ cartItemId: id, delta: -1 })
   }
 
+  // --- 3. HÀM XÓA DÙNG INSTANCE CỦA HOOK ---
   const handleRemove = (id) => {
-    if (!id) return
-    if (window.confirm('Bạn có chắc muốn xóa món ăn này khỏi giỏ hàng?')) {
-      removeItemMutation.mutate(id)
-    }
+    if (!id) return;
+
+    modal.confirm({
+      title: 'Xóa món ăn?',
+      icon: <ExclamationCircleOutlined className="text-red-500" />,
+      content: 'Bạn có chắc chắn muốn bỏ món này không?',
+      okText: 'Xóa luôn',
+      okType: 'danger',
+      cancelText: 'Giữ lại',
+      centered: true,
+      maskClosable: true,
+      async onOk() {
+        try {
+          // Dùng mutateAsync để chờ xóa xong mới đóng Modal
+          await removeItemMutation.mutateAsync(id);
+        } catch (e) {
+          console.error(e);
+        }
+      },
+    });
   }
 
   // =====================================================
@@ -101,7 +119,6 @@ const CartPage = () => {
     setIsCheckingOut(true)
 
     try {
-      // Gửi checkout (Backend tự lấy user_id từ token)
       await http.post('/cart/checkout', {
         table_id: mongoTableId,
       })
@@ -131,17 +148,18 @@ const CartPage = () => {
     )
 
   // =====================================================
-  // MAIN UI (FIXED FOOTER)
+  // MAIN UI
   // =====================================================
   return (
     <div className="max-w-screen-sm mx-auto bg-gray-50 min-h-screen relative">
 
-      {/* 1. PHẦN NỘI DUNG CHÍNH (Thêm pb-40 để tránh bị Footer che mất món cuối) */}
+      {/* 4. ĐẶT CONTEXT HOLDER Ở ĐÂY ĐỂ MODAL HIỆN LÊN ĐƯỢC */}
+      {contextHolder}
+
+      {/* PHẦN NỘI DUNG CHÍNH */}
       <div className="p-4 md:p-6 pb-40">
-        {/* Header */}
         <h1 className="text-2xl font-bold text-center text-gray-800 mb-6">Giỏ hàng</h1>
 
-        {/* List Items */}
         <div className="flex flex-col gap-3">
           {items.length === 0 ? (
             <div className="flex flex-col items-center justify-center mt-10 opacity-60">
@@ -161,12 +179,10 @@ const CartPage = () => {
         </div>
       </div>
 
-      {/* 2. FOOTER CỐ ĐỊNH (Ghim đáy màn hình) */}
+      {/* FOOTER CỐ ĐỊNH */}
       <div className="fixed bottom-0 left-0 right-0 bg-white shadow-[0_-4px_10px_rgba(0,0,0,0.05)] z-50 border-t border-gray-100">
-        {/* Wrapper để căn giữa giống phần nội dung trên (max-w-screen-sm) */}
         <div className="max-w-screen-sm mx-auto p-4">
 
-          {/* Dòng tổng tiền */}
           <div className="flex justify-between items-center mb-3">
             <span className="text-gray-600 font-medium">Tổng tạm tính:</span>
             <span className="text-xl font-bold text-orange-600">
@@ -174,7 +190,6 @@ const CartPage = () => {
             </span>
           </div>
 
-          {/* Nút xác nhận */}
           <button
             onClick={handleCheckout}
             disabled={

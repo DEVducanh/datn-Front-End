@@ -117,7 +117,6 @@ const OrderPage = () => {
 
         if (hasPaidOrder && allPaid && fetchedOrders.length > 0) {
           setIsPaidSuccess(true)
-          // Lưu lại ID đơn hàng cuối cùng (hoặc đầu tiên) để dùng cho trang đánh giá
           if (fetchedOrders[0]) {
             setLastPaidOrderId(fetchedOrders[0]._id)
           }
@@ -162,15 +161,18 @@ const OrderPage = () => {
     // Chỉ tính các món CHƯA HỦY
     const validItems = items.filter((i) => i.status !== 'Cancelled')
 
-    // Chỉ cho phép thanh toán khi có ít nhất 1 món đã phục vụ (hoặc đơn đã completed)
-    const hasServedItems = validItems.some(
-      (item) => ['Shipped', 'Served'].includes(item.status) || item.orderStatus === 'Completed'
+    // --- LOGIC SỬA ĐỔI: BẮT BUỘC TẤT CẢ PHẢI RA HẾT MỚI ĐƯỢC THANH TOÁN ---
+    // Điều kiện: Tất cả món (validItems) phải có status là 'Served' hoặc 'Shipped' hoặc 'Completed'
+    // Hoặc đơn hàng tổng (orderStatus) đã là 'Completed'
+    const isAllServed = validItems.every(
+      (item) => ['Shipped', 'Served', 'Completed'].includes(item.status) || item.orderStatus === 'Completed'
     )
 
-    if (!hasServedItems) {
-      messageApi.warning('Chưa có món nào ĐÃ PHỤC VỤ để thanh toán.')
+    if (!isAllServed) {
+      messageApi.warning('Vui lòng đợi món lên đủ mới được thanh toán!')
       return
     }
+
     setIsPaymentModalVisible(true)
   }
 
@@ -354,6 +356,12 @@ const OrderPage = () => {
     return sum + item.price * item.quantity
   }, 0)
 
+  // LOGIC CHECK NÚT THANH TOÁN (ĐÃ SỬA)
+  const validItems = items.filter((i) => i.status !== 'Cancelled');
+  const isAllServed = validItems.length > 0 && validItems.every(
+    (item) => ['Shipped', 'Served', 'Completed'].includes(item.status) || item.orderStatus === 'Completed'
+  );
+
   if (!currentTableId)
     return <div className="p-10 text-center text-red-500">Vui lòng quét mã QR.</div>
 
@@ -366,7 +374,6 @@ const OrderPage = () => {
           title="Cảm ơn quý khách đã sử dụng dịch vụ!"
           subTitle="Đơn hàng đã được thanh toán hoàn tất."
           extra={[
-            // NÚT ĐÁNH GIÁ (MỚI)
             <Button
               key="feedback"
               type="primary"
@@ -384,8 +391,6 @@ const OrderPage = () => {
             >
               Đánh giá món ăn
             </Button>,
-
-            // Nút về trang chủ
             <Button key="back" size="large" onClick={() => (window.location.href = '/flareon')}>
               Về trang chủ
             </Button>,
@@ -434,16 +439,32 @@ const OrderPage = () => {
           </div>
 
           <div className="mt-6 text-center">
-            <Button
-              type="primary"
-              size="large"
-              icon={<FileDoneOutlined />}
-              onClick={handlePaymentClick}
-              disabled={items.filter((i) => i.status !== 'Cancelled').length === 0}
-              className="bg-blue-600 hover:bg-blue-500 h-12 px-8 text-lg font-bold"
-            >
-              Thanh Toán (Món đã phục vụ)
-            </Button>
+            {/* --- NÚT THANH TOÁN ĐÃ UPDATE --- */}
+            {isAllServed ? (
+              <Button
+                type="primary"
+                size="large"
+                icon={<FileDoneOutlined />}
+                onClick={handlePaymentClick}
+                className="bg-blue-600 hover:bg-blue-500 h-12 px-8 text-lg font-bold animate-bounce"
+              >
+                Thanh Toán Ngay
+              </Button>
+            ) : (
+              <div className="flex flex-col items-center gap-2">
+                <Button
+                  disabled
+                  size="large"
+                  className="bg-gray-200 text-gray-400 border-none h-12 px-8 text-lg font-bold"
+                >
+                  Chưa thể thanh toán
+                </Button>
+                <span className="text-red-500 italic text-sm animate-pulse">
+                  (Vui lòng đợi món lên đủ mới được thanh toán)
+                </span>
+              </div>
+            )}
+
           </div>
         </>
       )}
