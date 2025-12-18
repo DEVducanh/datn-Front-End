@@ -69,19 +69,17 @@ const FoodDetailPage = () => {
     queryKey: ['feedbacks', productId],
     queryFn: async () => {
       try {
-        console.log("🚀 Đang gọi API lấy feedback cho ID:", productId);
+        // console.log("🚀 Đang gọi API lấy feedback cho ID:", productId);
         const res = await feedbackAPI.getByDish(productId)
-        console.log("🔥 DỮ LIỆU FEEDBACK GỐC TỪ BACKEND:", res); // Bạn xem dòng này trong Console (F12)
 
         // BẮT MỌI CẤU TRÚC DỮ LIỆU CÓ THỂ
         if (Array.isArray(res)) return res;
         if (res.data && Array.isArray(res.data)) return res.data;
-        if (res.Feedbacks && Array.isArray(res.Feedbacks)) return res.Feedbacks; // Chữ Hoa
-        if (res.feedbacks && Array.isArray(res.feedbacks)) return res.feedbacks; // Chữ thường
+        if (res.Feedbacks && Array.isArray(res.Feedbacks)) return res.Feedbacks;
+        if (res.feedbacks && Array.isArray(res.feedbacks)) return res.feedbacks;
         if (res.reviews && Array.isArray(res.reviews)) return res.reviews;
         if (res.docs && Array.isArray(res.docs)) return res.docs;
 
-        // Nếu backend trả về { success: true, data: [...] }
         if (res.success && Array.isArray(res.data)) return res.data;
 
         return []
@@ -98,14 +96,16 @@ const FoodDetailPage = () => {
     ? (reviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0) / reviews.length).toFixed(1)
     : 0
 
-  // 3. Logic thêm giỏ hàng
+  // 3. LOGIC THÊM GIỎ HÀNG
   const addToCartMutation = useMutation({
     mutationFn: (payload) => http.post('/cart/add-item', payload),
     onSuccess: (response, variables) => {
       message.success(`Đã thêm ${variables.quantity} "${variables.dishName}" vào giỏ!`)
-      const { table_id: tableId, user_id: userId } = variables
-      if (tableId && userId) {
-        queryClient.invalidateQueries({ queryKey: ['cart', tableId, userId] })
+
+      // Invalidate query để Cart cập nhật ngay
+      const { table_id: tableId } = variables
+      if (tableId) {
+        queryClient.invalidateQueries({ queryKey: ['cart', tableId] })
       }
     },
     onError: (err) => message.error(err.response?.data?.message || 'Có lỗi xảy ra.'),
@@ -114,31 +114,32 @@ const FoodDetailPage = () => {
   const handleIncrease = () => setQuantity((prev) => prev + 1)
   const handleDecrease = () => setQuantity((prev) => (prev > 1 ? prev - 1 : 1))
 
+  // --- SỬA QUAN TRỌNG: CHO PHÉP GUEST GỌI MÓN ---
   const handleAddToCart = () => {
     if (!foodDetails) return
-    let userId = currentUser?._id || currentUser?.id
-    if (!userId) {
-      const uStr = localStorage.getItem('user');
-      if (uStr) userId = JSON.parse(uStr)._id;
-    }
 
-    if (!userId) {
-      message.warning('Bạn cần đăng nhập để gọi món.')
-      navigate(`/flareon/login?redirect=${encodeURIComponent(location.pathname)}`)
-      return
-    }
-
+    // 1. Kiểm tra Table ID (Bắt buộc)
     const mongoTableId = localStorage.getItem('currentTableId')
     if (!mongoTableId) {
       message.error('Vui lòng quét mã QR trước.')
       return
     }
 
+    // 2. Tìm User ID (Nếu có thì tốt, không có thì thôi)
+    let userId = currentUser?._id || currentUser?.id
+    if (!userId) {
+      const uStr = localStorage.getItem('user');
+      if (uStr) {
+        try { userId = JSON.parse(uStr)._id } catch (e) { }
+      }
+    }
+
+    // 3. Gửi Request (Không chặn nếu thiếu userId)
     addToCartMutation.mutate({
       table_id: mongoTableId,
       dish_id: foodDetails._id,
       quantity: quantity,
-      user_id: userId,
+      user_id: userId, // Backend tự xử lý nếu null (coi là Guest)
       dishName: foodDetails.name
     })
   }
