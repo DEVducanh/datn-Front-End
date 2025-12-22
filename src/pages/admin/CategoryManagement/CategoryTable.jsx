@@ -65,7 +65,7 @@ const CategoryTable = ({ data, loading, onEdit, onRemove, deletingId, onToggleSt
         render: (_, record) => (
           <Space>
             <AntButton title="Sửa" icon={<EditOutlined />} onClick={() => onEdit(record)} />
-            <Popconfirm
+            {/* <Popconfirm
               title="Xoá danh mục?"
               description="Các món thuộc danh mục này cũng sẽ bị ẩn!"
               onConfirm={() => onRemove(record._id)}
@@ -79,7 +79,7 @@ const CategoryTable = ({ data, loading, onEdit, onRemove, deletingId, onToggleSt
                 danger
                 loading={deletingId === record._id}
               />
-            </Popconfirm>
+            </Popconfirm> */}
           </Space>
         ),
       },

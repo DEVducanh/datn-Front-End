@@ -53,12 +53,12 @@ const DishTable = ({ data, loading, onEdit, onRemove, deletingId }) => {
               okText="Có"
               cancelText="Không"
             >
-              <AntButton
+              {/* <AntButton
                 title="Xoá"
                 icon={<DeleteOutlined />}
                 danger
                 loading={deletingId === record._id}
-              />
+              /> */}
             </Popconfirm>
           </div>
         ),

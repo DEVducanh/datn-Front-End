@@ -6,25 +6,68 @@ import { useNavigate } from 'react-router-dom'
 
 const { Text } = Typography
 
+// Helper format tiền
+const formatVnd = (n) => (n || 0).toLocaleString('vi-VN') + 'đ'
+
 const PaymentModal = ({ visible, onClose, items = [] }) => {
   const navigate = useNavigate()
   const [paymentMethod, setPaymentMethod] = useState('Cash')
   const [isProcessing, setIsProcessing] = useState(false)
 
-  // TÍNH GIÁ & LẤY ID ĐƠN
-  const { totalAmount, singleOrderId, orderIdsToPay } = useMemo(() => {
-    const payableItems = items.filter(
+  // --- LOGIC TÍNH TOÁN & GỘP MÓN ---
+  const { totalAmount, singleOrderId, orderIdsToPay, groupedItems } = useMemo(() => {
+    // 1. Lọc món chưa thanh toán & chưa hủy
+    const validItems = items.filter(
       (item) => item.orderStatus !== 'Paid' && item.status !== 'Cancelled'
     )
 
-    const total = payableItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-    const uniqueOrderIds = [...new Set(payableItems.map((item) => item.orderId))]
+    // 2. Tính tổng tiền & Lấy ID đơn
+    const total = validItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+    const uniqueOrderIds = [...new Set(validItems.map((item) => item.orderId))]
     const id = uniqueOrderIds.length > 0 ? uniqueOrderIds[0] : null
 
-    return { totalAmount: total, singleOrderId: id, orderIdsToPay: uniqueOrderIds }
+    // 3. LOGIC GỘP MÓN (MỚI)
+    const groupMap = {}
+
+    validItems.forEach((item) => {
+      // A. Xác định Tên hiển thị (để hiển thị cho đẹp)
+      let dishName = item.name || item.dish_name || item.product_name
+      // Nếu tên nằm sâu trong object dish_id
+      if (!dishName && item.dish_id && typeof item.dish_id === 'object') {
+        dishName = item.dish_id.dish_name || item.dish_id.name
+      }
+      if (!dishName) dishName = 'Món ăn'
+
+      // B. Xác định Key duy nhất để gộp (Ưu tiên ID món, nếu không có thì dùng Tên)
+      let uniqueKey = item.dish_id
+      if (typeof uniqueKey === 'object' && uniqueKey !== null) {
+        uniqueKey = uniqueKey._id || uniqueKey.id // Lấy ID string nếu là object
+      }
+      if (!uniqueKey) uniqueKey = dishName // Fallback dùng tên làm key
+
+      // C. Tiến hành gộp
+      if (groupMap[uniqueKey]) {
+        // Nếu món đã có trong danh sách -> Cộng dồn số lượng
+        groupMap[uniqueKey].quantity += item.quantity
+      } else {
+        // Nếu chưa có -> Tạo mới
+        groupMap[uniqueKey] = {
+          ...item,
+          displayName: dishName, // Lưu cái tên đã tìm được vào đây luôn
+          quantity: item.quantity,
+        }
+      }
+    })
+
+    return {
+      totalAmount: total,
+      singleOrderId: id,
+      orderIdsToPay: uniqueOrderIds,
+      groupedItems: Object.values(groupMap), // Chuyển object thành mảng để map ra view
+    }
   }, [items])
 
-  // XỬ LÝ THANH TOÁN
+  // --- XỬ LÝ THANH TOÁN (GIỮ NGUYÊN) ---
   const handlePayment = async () => {
     if (!singleOrderId) {
       message.warning('Không tìm thấy đơn hàng hợp lệ.')
@@ -69,7 +112,6 @@ const PaymentModal = ({ visible, onClose, items = [] }) => {
 
       // ======= VNPAY =======
       if (paymentMethod === 'VnPay') {
-        // Cập nhật Completed
         try {
           const updatePromises = orderIdsToPay.map((id) =>
             http.patch(`/orders/${id}/status`, { status: 'Completed' })
@@ -79,7 +121,6 @@ const PaymentModal = ({ visible, onClose, items = [] }) => {
           console.warn('Lỗi update status:', err)
         }
 
-        // Tạo hóa đơn
         const invoicePayload = {
           order_id: singleOrderId,
           method: 'VnPay',
@@ -87,7 +128,6 @@ const PaymentModal = ({ visible, onClose, items = [] }) => {
         }
 
         const invoiceRes = await http.post('/invoices', invoicePayload)
-
         const invoiceId =
           invoiceRes.data?.invoice?._id ||
           invoiceRes.data?._id ||
@@ -96,7 +136,6 @@ const PaymentModal = ({ visible, onClose, items = [] }) => {
 
         if (!invoiceId) throw new Error('Không lấy được ID hóa đơn từ Server')
 
-        // Lấy link VNPay
         const paymentRes = await http.post('/payment/create-payment', {
           amount: totalAmount,
           invoicesId: invoiceId,
@@ -150,19 +189,48 @@ const PaymentModal = ({ visible, onClose, items = [] }) => {
       maskClosable={!isProcessing}
     >
       <div className="px-2 pb-4">
-        {/* Loading Overlay */}
         {isProcessing && (
           <div className="absolute inset-0 bg-white/90 z-50 flex flex-col items-center justify-center rounded-2xl">
             <Spin size="large" />
             <p className="mt-4 text-orange-600 font-semibold animate-pulse">
-              {paymentMethod === 'Cash'
-                ? 'Đang gửi yêu cầu...'
-                : 'Đang kết nối cổng thanh toán...'}
+              {paymentMethod === 'Cash' ? 'Đang gửi yêu cầu...' : 'Đang kết nối cổng thanh toán...'}
             </p>
           </div>
         )}
 
-        <div className="bg-orange-50 rounded-xl p-6 text-center my-6 border border-orange-200">
+        {/* ------------------------------------------------------- */}
+        {/* DANH SÁCH MÓN ĂN (ĐÃ GỘP) */}
+        {/* ------------------------------------------------------- */}
+        <div className="bg-gray-50 p-4 rounded-lg mb-5 border border-gray-100">
+          <h4 className="font-bold text-gray-700 text-sm mb-3 uppercase tracking-wide border-b pb-2">
+            Chi tiết đơn hàng
+          </h4>
+
+          <div className="max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
+            {groupedItems.map((item, index) => (
+              <div
+                key={index}
+                className="flex justify-between items-start mb-2 text-sm border-b border-dashed border-gray-200 pb-2 last:border-0 last:pb-0"
+              >
+                <div className="flex gap-2 items-start">
+                  {/* Số lượng (đã cộng dồn) */}
+                  <span className="bg-orange-100 text-orange-600 font-bold px-1.5 rounded text-xs mt-0.5 min-w-[24px] text-center">
+                    {item.quantity}x
+                  </span>
+                  {/* Tên món */}
+                  <span className="text-gray-800 font-medium">{item.displayName}</span>
+                </div>
+                {/* Thành tiền (đã nhân số lượng gộp) */}
+                <span className="text-gray-600 font-medium whitespace-nowrap ml-2">
+                  {formatVnd(item.price * item.quantity)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* ------------------------------------------------------- */}
+
+        <div className="bg-orange-50 rounded-xl p-6 text-center mb-6 border border-orange-200">
           <Text type="secondary" className="text-sm uppercase tracking-wide font-medium">
             Tổng tiền
           </Text>
@@ -177,9 +245,10 @@ const PaymentModal = ({ visible, onClose, items = [] }) => {
               key={option.key}
               onClick={() => !isProcessing && setPaymentMethod(option.key)}
               className={`relative flex items-center p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 group
-                ${paymentMethod === option.key
-                  ? option.activeColor
-                  : 'border-gray-100 hover:bg-gray-50'
+                ${
+                  paymentMethod === option.key
+                    ? option.activeColor
+                    : 'border-gray-100 hover:bg-gray-50'
                 }`}
             >
               <div className="mr-4">{option.icon}</div>

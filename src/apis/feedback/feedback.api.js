@@ -2,6 +2,7 @@ import http from '@/apis/http'
 
 const feedbackAPI = {
   // 1. Gửi đánh giá mới (POST /feedback)
+  getAll: () => http.get('/feedback'),
   create: (payload) => http.post('/feedback', payload),
 
   // 2. Lấy đánh giá theo món ăn (GET /feedback/dish/:dishId)
