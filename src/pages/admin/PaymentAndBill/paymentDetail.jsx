@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react'
-import { Button, Divider, Table, Spin, message } from 'antd'
+import { Button, Divider, Table, Spin, message, Tag } from 'antd'
 import http from '@/apis/http'
 import { PrinterOutlined, FilePdfOutlined } from '@ant-design/icons'
 
@@ -22,7 +22,6 @@ const PaymentDetail = ({ order, onClose, onMarkPaid }) => {
       }
 
       // B. Nếu chưa có -> Gọi API
-      // Xác định đây là Invoice hay Order để lấy ID phù hợp
       const realOrderId = order.order_id?._id || order.order_id || order._id
       if (!realOrderId) return
 
@@ -46,25 +45,22 @@ const PaymentDetail = ({ order, onClose, onMarkPaid }) => {
     fetchOrderItems()
   }, [order])
 
-  // --- 2. LOGIC GỘP MÓN (Giống bên Thu ngân) ---
+  // --- 2. LOGIC GỘP MÓN ---
   const groupedItems = useMemo(() => {
     if (!items || items.length === 0) return []
     const groupMap = {}
 
     items.forEach((item) => {
-      // Tìm tên hiển thị
       let dishName = item.dish_name || item.name
       if (item.dish_id && typeof item.dish_id === 'object') {
         dishName = item.dish_id.dish_name || item.dish_id.name
       }
       if (!dishName) dishName = 'Món ăn'
 
-      // Tìm key duy nhất
       let uniqueKey = item.dish_id
       if (typeof uniqueKey === 'object' && uniqueKey !== null) uniqueKey = uniqueKey._id
       if (!uniqueKey) uniqueKey = dishName
 
-      // Gộp
       if (groupMap[uniqueKey]) {
         groupMap[uniqueKey].quantity += item.quantity || 0
       } else {
@@ -82,7 +78,6 @@ const PaymentDetail = ({ order, onClose, onMarkPaid }) => {
 
   // Tính toán tổng tiền
   const subtotal = groupedItems.reduce((s, it) => s + (it.quantity || 0) * (it.price || 0), 0)
-  // Ưu tiên lấy tổng tiền từ Invoice, nếu không thì tính tổng món
   const finalTotal = order.total_amount || order.total || subtotal
 
   const isPaidStatus = (s) => {
@@ -91,21 +86,40 @@ const PaymentDetail = ({ order, onClose, onMarkPaid }) => {
   }
   const isPaid = isPaidStatus(order.status)
 
-  // --- 3. LOGIC IN ẤN THÔNG MINH ---
+  // --- 3. [MỚI THÊM] LOGIC TÌM PHƯƠNG THỨC THANH TOÁN ---
+  const getPaymentMethod = () => {
+    // Ưu tiên 1: Lấy trực tiếp từ Invoice (nếu có)
+    let m = order.method
+
+    // Ưu tiên 2: Lấy từ Order liên kết (nếu Invoice có populate order_id)
+    if (!m && order.order_id && typeof order.order_id === 'object') {
+      m = order.order_id.payment?.method || order.order_id.method
+    }
+
+    // Ưu tiên 3: Lấy từ object payment
+    if (!m && order.payment) m = order.payment.method
+
+    // Chuẩn hóa hiển thị
+    const lowerM = (m || '').toLowerCase()
+    if (lowerM.includes('vn') || lowerM.includes('qr')) return <Tag color="blue">VNPay / QR</Tag>
+    if (lowerM.includes('cash') || lowerM.includes('tiền'))
+      return <Tag color="orange">Tiền mặt</Tag>
+
+    // Nếu không tìm thấy nhưng đã thanh toán -> Mặc định là Tiền mặt (Fallback)
+    if (isPaid && !m) return <Tag color="default">Tiền mặt (Mặc định)</Tag>
+
+    return m ? <Tag>{m}</Tag> : <Tag color="default">Chưa xác định</Tag>
+  }
+
+  // --- 4. LOGIC IN ẤN THÔNG MINH ---
   const handleSmartPrint = async () => {
-    // A. Nếu ĐÃ THANH TOÁN -> Cố gắng lấy PDF
     if (isPaid) {
       setLoadingPdf(true)
       try {
-        // Xác định Invoice ID
         let invoiceId = null
-
-        // Trường hợp 1: 'order' này chính là Invoice (có trường order_id)
         if (order.order_id) {
           invoiceId = order._id
-        }
-        // Trường hợp 2: 'order' này là Order -> Phải tìm Invoice của nó
-        else {
+        } else {
           const res = await http.get('/invoices')
           const all = res.data?.data || res.data || []
           const found = all.find((inv) => {
@@ -120,21 +134,18 @@ const PaymentDetail = ({ order, onClose, onMarkPaid }) => {
           const url = resPdf.data?.pdfUrl || resPdf.pdfUrl
           if (url) {
             window.open(url, '_blank')
-            return // In PDF thành công thì dừng
+            return
           }
         }
-        // Nếu không tìm thấy PDF/Invoice -> Fallback xuống in HTML
         message.warning('Chưa có bản PDF, chuyển sang in phiếu tạm.')
         handlePrintHTML()
       } catch (e) {
         console.error('Lỗi PDF:', e)
-        handlePrintHTML() // Lỗi thì in HTML
+        handlePrintHTML()
       } finally {
         setLoadingPdf(false)
       }
-    }
-    // B. Nếu CHƯA THANH TOÁN -> In HTML Tạm tính
-    else {
+    } else {
       handlePrintHTML()
     }
   }
@@ -178,11 +189,7 @@ const PaymentDetail = ({ order, onClose, onMarkPaid }) => {
   const invoiceIdDisplay = (order._id && `#${String(order._id).slice(-8)}`) || '-'
 
   const columns = [
-    {
-      title: 'Tên món',
-      dataIndex: 'display_name',
-      render: (t, r) => t || r.dish_name || '---',
-    },
+    { title: 'Tên món', dataIndex: 'display_name', render: (t, r) => t || r.dish_name || '---' },
     { title: 'SL', dataIndex: 'quantity', align: 'center', render: (v) => v || 0 },
     {
       title: 'Đơn giá',
@@ -199,7 +206,7 @@ const PaymentDetail = ({ order, onClose, onMarkPaid }) => {
 
   return (
     <div>
-      {/* VÙNG IN ẨN (Template HTML) */}
+      {/* VÙNG IN ẨN */}
       <div style={{ display: 'none' }}>
         <div ref={printRef}>
           <div className="header">
@@ -260,8 +267,6 @@ const PaymentDetail = ({ order, onClose, onMarkPaid }) => {
           <div>
             <strong>Bàn:</strong> {tableName}
           </div>
-          <div>{/* <strong>Khách:</strong> {customerName} */}</div>
-          <div>{/* <strong>NV:</strong> {order.servedByName || order.servedBy || '-'} */}</div>
           <div>
             <strong>Ngày:</strong> {formatDate(order.created_at || order.createdAt)}
           </div>
@@ -287,34 +292,26 @@ const PaymentDetail = ({ order, onClose, onMarkPaid }) => {
           />
         </Spin>
 
-        {/* THÔNG TIN THANH TOÁN (Nếu có) */}
-        {(order.payment || order.transaction) && (
-          <div
-            style={{
-              marginTop: 15,
-              borderTop: '1px dashed #ccc',
-              paddingTop: 10,
-              textAlign: 'right',
-              fontSize: '13px',
-              color: '#666',
-            }}
-          >
-            {order.payment && (
-              <>
-                <div>
-                  Phương thức: {order.payment.method} | Trạng thái: {order.payment.status}
-                </div>
-                <div>Đã trả: {order.payment.amount_paid?.toLocaleString()}₫</div>
-              </>
-            )}
-          </div>
-        )}
+        {/* --- [MỚI THÊM] HIỂN THỊ PHƯƠNG THỨC THANH TOÁN --- */}
+        <div
+          style={{
+            marginTop: 15,
+            borderTop: '1px dashed #ccc',
+            paddingTop: 10,
+            display: 'flex',
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            gap: '10px',
+          }}
+        >
+          {/* <span style={{ color: '#666' }}>Phương thức thanh toán:</span>
+          {getPaymentMethod()} */}
+        </div>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
         <Button onClick={onClose}>Đóng</Button>
 
-        {/* Nút In Thông Minh */}
         <Button
           onClick={handleSmartPrint}
           loading={loadingPdf}

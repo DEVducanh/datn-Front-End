@@ -334,17 +334,20 @@ const Dashboard = () => {
     const finalPayStats = [
       { name: 'Tiền mặt', value: payMap.Cash },
       { name: 'VNPay/QR', value: payMap.VnPay },
-      { name: 'Khác', value: payMap.Other },
     ].filter((i) => i.value > 0)
 
     // --- E. GIỜ VÀNG ---
-    const hoursMap = { 'Trưa (11h-14h)': 0, 'Chiều (14h-18h)': 0, 'Tối (18h-23h)': 0, Khác: 0 }
+    const hoursMap = {
+      'Trưa (11h-14h)': 0,
+      'Chiều (14h-18h)': 0,
+      'Tối (18h-23h)': 0,
+      'Đêm (23h-11h)': 0,
+    }
     validOrders.forEach((ord) => {
       const h = dayjs(ord.created_at || ord.createdAt).hour()
       if (h >= 11 && h < 14) hoursMap['Trưa (11h-14h)']++
       else if (h >= 14 && h < 18) hoursMap['Chiều (14h-18h)']++
       else if (h >= 18 && h <= 23) hoursMap['Tối (18h-23h)']++
-      else hoursMap['Khác']++
     })
     const finalTimeStats = Object.entries(hoursMap).map(([k, v]) => ({ name: k, value: v }))
 
@@ -538,7 +541,7 @@ const Dashboard = () => {
                   </ResponsiveContainer>
                 </div>
               </TabPane>
-              <TabPane tab="Thanh toán" key="2">
+              {/* <TabPane tab="Thanh toán" key="2">
                 <div style={{ width: '100%', height: 250 }}>
                   <ResponsiveContainer>
                     <PieChart>
@@ -562,7 +565,7 @@ const Dashboard = () => {
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-              </TabPane>
+              </TabPane> */}
               <TabPane tab="Giờ vàng" key="3">
                 <div style={{ width: '100%', height: 250 }}>
                   <ResponsiveContainer>

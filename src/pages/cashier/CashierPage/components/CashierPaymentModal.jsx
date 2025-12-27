@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react'
-import { Modal, Button, Descriptions, message, Tag, Table, Divider, Popconfirm, Spin } from 'antd'
+import { Modal, Button, Descriptions, message, Tag, Table, Divider, Popconfirm } from 'antd'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import http from '@/apis/http'
 import {
@@ -10,7 +10,6 @@ import {
   PrinterOutlined,
   FilePdfOutlined,
 } from '@ant-design/icons'
-import dayjs from 'dayjs'
 
 const formatVnd = (n) => (n || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + 'đ'
 
@@ -64,52 +63,75 @@ const CashierPaymentModal = ({ isOpen, onClose, order }) => {
     0
   const isPaid = order?.status === 'Paid'
 
-  // --- 3. HÀM IN ẤN THÔNG MINH (MỚI) ---
+  // --- 3. HÀM IN ẤN THÔNG MINH (ĐÃ SỬA LỖI ĐƠN CŨ) ---
   const handleSmartPrint = async () => {
-    // TRƯỜNG HỢP 1: ĐÃ THANH TOÁN -> GỌI API LẤY PDF XỊN
+    // A. Nếu ĐÃ THANH TOÁN -> Cố gắng lấy PDF
     if (isPaid) {
       setLoadingPdf(true)
       try {
-        // Bước A: Tìm hóa đơn của đơn hàng này
-        // (Vì API lấy PDF cần Invoice ID, mà Order chỉ có Order ID)
-        const resInvoices = await http.get('/invoices') // Lấy danh sách hóa đơn
-        const allInvoices = resInvoices.data?.data || resInvoices.data || []
+        let invoiceId = null
 
-        // Tìm cái hóa đơn nào có order_id trùng với đơn này
-        const targetInvoice = allInvoices.find((inv) => {
-          const invOrderId = typeof inv.order_id === 'object' ? inv.order_id._id : inv.order_id
-          return invOrderId === order._id
-        })
-
-        if (!targetInvoice) {
-          message.warning('Không tìm thấy dữ liệu hóa đơn trên hệ thống!')
-          setLoadingPdf(false)
-          return
+        // CÁCH 1: Kiểm tra xem order đã có invoice_id chưa (nếu backend có populate)
+        if (order.invoice_id) {
+          invoiceId = typeof order.invoice_id === 'object' ? order.invoice_id._id : order.invoice_id
         }
 
-        // Bước B: Gọi API lấy link PDF
-        const resPdf = await http.get(`/invoice/${targetInvoice._id}/pdf`)
-        const pdfUrl = resPdf.data?.pdfUrl || resPdf.pdfUrl
+        // CÁCH 2: Tìm kiếm hóa đơn theo order_id (có filter để tránh phân trang)
+        if (!invoiceId) {
+          try {
+            // Thử gọi API có params để lọc đúng đơn này
+            const res = await http.get('/invoices', { params: { order_id: order._id } })
+            const list = res.data?.data || res.data || []
 
-        if (pdfUrl) {
-          window.open(pdfUrl, '_blank') // Mở link PDF tab mới
-        } else {
-          message.error('Server không trả về link PDF.')
+            const target = list.find((inv) => {
+              const oId = typeof inv.order_id === 'object' ? inv.order_id._id : inv.order_id
+              return oId === order._id
+            })
+            if (target) invoiceId = target._id
+          } catch (e) {
+            console.log('Lỗi tìm invoice theo params, thử fallback...')
+          }
         }
+
+        // CÁCH 3: Fallback (Lấy tất cả - cách cũ, chỉ chạy nếu cách 2 thất bại)
+        if (!invoiceId) {
+          const resInvoices = await http.get('/invoices')
+          const allInvoices = resInvoices.data?.data || resInvoices.data || []
+          const target = allInvoices.find((inv) => {
+            const invOrderId = typeof inv.order_id === 'object' ? inv.order_id._id : inv.order_id
+            return invOrderId === order._id
+          })
+          if (target) invoiceId = target._id
+        }
+
+        if (invoiceId) {
+          const resPdf = await http.get(`/invoice/${invoiceId}/pdf`)
+          const pdfUrl = resPdf.data?.pdfUrl || resPdf.pdfUrl
+
+          if (pdfUrl) {
+            window.open(pdfUrl, '_blank')
+            return // Thành công -> Thoát luôn
+          }
+        }
+
+        // Nếu chạy hết các cách mà vẫn không có PDF -> Chuyển sang in HTML
+        message.warning('Không tìm thấy bản PDF (có thể do đơn quá cũ). Đang in phiếu tạm...')
+        handlePrintHTML()
       } catch (error) {
         console.error('Lỗi lấy PDF:', error)
-        message.error('Lỗi khi tải hóa đơn PDF.')
+        // Gặp lỗi API -> Cũng cho in HTML luôn để không bị tắc
+        handlePrintHTML()
       } finally {
         setLoadingPdf(false)
       }
     }
-    // TRƯỜNG HỢP 2: CHƯA THANH TOÁN -> IN PHIẾU TẠM TÍNH (HTML)
+    // B. Nếu CHƯA THANH TOÁN -> In HTML
     else {
       handlePrintHTML()
     }
   }
 
-  // Hàm in HTML cũ (Dùng cho phiếu tạm tính)
+  // Hàm in HTML cũ (Dùng cho phiếu tạm tính hoặc fallback)
   const handlePrintHTML = () => {
     if (!printRef.current) return
     const w = window.open('', '_blank')
@@ -168,6 +190,7 @@ const CashierPaymentModal = ({ isOpen, onClose, order }) => {
           await http.patch(`/orders/${order._id}`, { status: 'Completed' })
         } catch (e) {}
       }
+      // Lưu ý: Thêm method 'Cash' để thống kê đúng
       const payload = { order_id: order._id, method: 'Cash', amount: realTotal }
       createInvoiceMutation.mutate(payload)
     } catch (error) {
@@ -308,7 +331,7 @@ const CashierPaymentModal = ({ isOpen, onClose, order }) => {
               type={isPaid ? 'default' : 'dashed'}
               className={isPaid ? 'border-blue-500 text-blue-500' : ''}
             >
-              {isPaid ? 'Tải Hóa Đơn PDF' : 'In Tạm Tính'}
+              {isPaid ? 'Tải Hóa Đơn PDF' : 'In Phiếu Tạm'}
             </Button>
 
             <Button
