@@ -48,12 +48,12 @@ const Header = () => {
       label: <NavLink to="/flareon/orders">Đơn hàng của tôi</NavLink>,
       icon: <Receipt size={16} />,
     },
-    {
-      key: 'history-modal',
-      label: 'Lịch sử hóa đơn',
-      icon: <Clock size={16} />,
-      onClick: () => setIsModalOpen(true),
-    },
+    // {
+    //   key: 'history-modal',
+    //   label: 'Lịch sử hóa đơn',
+    //   icon: <Clock size={16} />,
+    //   onClick: () => setIsModalOpen(true),
+    // },
     { type: 'divider' },
     {
       key: 'logout',
@@ -69,10 +69,7 @@ const Header = () => {
   const UserDropdown = () => (
     <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" arrow trigger={['click']}>
       <div className="flex items-center gap-2 cursor-pointer p-1 rounded-full hover:bg-gray-100 transition-colors border border-transparent hover:border-gray-200">
-        <Avatar
-          style={{ backgroundColor: '#f56a00', verticalAlign: 'middle' }}
-          size="large"
-        >
+        <Avatar style={{ backgroundColor: '#f56a00', verticalAlign: 'middle' }} size="large">
           {userName.charAt(0).toUpperCase()}
         </Avatar>
         <span className="hidden lg:inline text-gray-700 font-semibold max-w-[100px] truncate">
@@ -94,15 +91,45 @@ const Header = () => {
             <div className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
               <FlameKindling className="w-6 h-6 text-white" />
             </div>
-            <span className="text-xl text-gray-900 font-bold tracking-tight group-hover:text-orange-600 transition-colors">Flareon</span>
+            <span className="text-xl text-gray-900 font-bold tracking-tight group-hover:text-orange-600 transition-colors">
+              Flareon
+            </span>
           </div>
 
           {/* Menu Desktop */}
           <div className="hidden md:flex items-center gap-8 font-medium text-gray-600">
-            <NavLink to="/flareon" className={({ isActive }) => isActive ? "text-orange-600" : "hover:text-orange-500 transition-colors"}>Trang chủ</NavLink>
-            <NavLink to="/flareon/about" className={({ isActive }) => isActive ? "text-orange-600" : "hover:text-orange-500 transition-colors"}>Về chúng tôi</NavLink>
-            <NavLink to="/flareon/category" className={({ isActive }) => isActive ? "text-orange-600" : "hover:text-orange-500 transition-colors"}>Món ăn</NavLink>
-            <NavLink to="/flareon/contact" className={({ isActive }) => isActive ? "text-orange-600" : "hover:text-orange-500 transition-colors"}>Liên hệ</NavLink>
+            <NavLink
+              to="/flareon"
+              className={({ isActive }) =>
+                isActive ? 'text-orange-600' : 'hover:text-orange-500 transition-colors'
+              }
+            >
+              Trang chủ
+            </NavLink>
+            <NavLink
+              to="/flareon/about"
+              className={({ isActive }) =>
+                isActive ? 'text-orange-600' : 'hover:text-orange-500 transition-colors'
+              }
+            >
+              Về chúng tôi
+            </NavLink>
+            <NavLink
+              to="/flareon/category"
+              className={({ isActive }) =>
+                isActive ? 'text-orange-600' : 'hover:text-orange-500 transition-colors'
+              }
+            >
+              Món ăn
+            </NavLink>
+            <NavLink
+              to="/flareon/contact"
+              className={({ isActive }) =>
+                isActive ? 'text-orange-600' : 'hover:text-orange-500 transition-colors'
+              }
+            >
+              Liên hệ
+            </NavLink>
           </div>
 
           {/* User + Cart Desktop */}
@@ -121,7 +148,11 @@ const Header = () => {
               <UserDropdown />
             ) : (
               <div className="flex gap-2">
-                <AntButton onClick={() => navigate('/flareon/login')} type="primary" className="!px-5">
+                <AntButton
+                  onClick={() => navigate('/flareon/login')}
+                  type="primary"
+                  className="!px-5"
+                >
                   Đăng nhập
                 </AntButton>
                 <AntButton onClick={() => navigate('/flareon/register')} className="!px-5">
@@ -132,7 +163,10 @@ const Header = () => {
           </div>
 
           {/* Mobile Toggle Button */}
-          <button className="md:hidden p-2 rounded-md hover:bg-gray-100" onClick={() => setIsMenuOpen(!isMenuOpen)}>
+          <button
+            className="md:hidden p-2 rounded-md hover:bg-gray-100"
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+          >
             {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
         </div>
@@ -140,16 +174,32 @@ const Header = () => {
         {/* Mobile Menu */}
         {isMenuOpen && (
           <div className="md:hidden flex flex-col gap-2 mt-4 pb-4 border-t border-gray-200 animate-in slide-in-from-top-2">
-            <NavLink className="py-3 px-2 rounded-md hover:bg-gray-50" to="/flareon" onClick={() => setIsMenuOpen(false)}>
+            <NavLink
+              className="py-3 px-2 rounded-md hover:bg-gray-50"
+              to="/flareon"
+              onClick={() => setIsMenuOpen(false)}
+            >
               Trang chủ
             </NavLink>
-            <NavLink className="py-3 px-2 rounded-md hover:bg-gray-50" to="/flareon/about" onClick={() => setIsMenuOpen(false)}>
+            <NavLink
+              className="py-3 px-2 rounded-md hover:bg-gray-50"
+              to="/flareon/about"
+              onClick={() => setIsMenuOpen(false)}
+            >
               Về chúng tôi
             </NavLink>
-            <NavLink className="py-3 px-2 rounded-md hover:bg-gray-50" to="/flareon/category" onClick={() => setIsMenuOpen(false)}>
+            <NavLink
+              className="py-3 px-2 rounded-md hover:bg-gray-50"
+              to="/flareon/category"
+              onClick={() => setIsMenuOpen(false)}
+            >
               Món ăn
             </NavLink>
-            <NavLink className="py-3 px-2 rounded-md hover:bg-gray-50" to="/flareon/contact" onClick={() => setIsMenuOpen(false)}>
+            <NavLink
+              className="py-3 px-2 rounded-md hover:bg-gray-50"
+              to="/flareon/contact"
+              onClick={() => setIsMenuOpen(false)}
+            >
               Liên hệ
             </NavLink>
 
@@ -157,22 +207,40 @@ const Header = () => {
               {isLoggedIn && user ? (
                 <div className="space-y-3">
                   <div className="flex items-center gap-3 px-2 py-2 bg-orange-50 rounded-lg">
-                    <Avatar style={{ backgroundColor: '#f56a00' }}>{userName.charAt(0).toUpperCase()}</Avatar>
+                    <Avatar style={{ backgroundColor: '#f56a00' }}>
+                      {userName.charAt(0).toUpperCase()}
+                    </Avatar>
                     <div>
                       <p className="font-bold text-gray-800">{userName}</p>
                       <p className="text-xs text-green-600 font-medium">Đang hoạt động</p>
                     </div>
                   </div>
 
-                  <Button block icon={<Receipt size={16} />} onClick={() => navigate('/flareon/orders')} className="!justify-start">
+                  <Button
+                    block
+                    icon={<Receipt size={16} />}
+                    onClick={() => navigate('/flareon/orders')}
+                    className="!justify-start"
+                  >
                     Đơn hàng của tôi
                   </Button>
 
-                  <Button block icon={<Clock size={16} />} onClick={() => setIsModalOpen(true)} className="!justify-start">
+                  <Button
+                    block
+                    icon={<Clock size={16} />}
+                    onClick={() => setIsModalOpen(true)}
+                    className="!justify-start"
+                  >
                     Lịch sử hóa đơn
                   </Button>
 
-                  <Button block danger icon={<LogOut size={16} />} onClick={logout} className="!justify-start">
+                  <Button
+                    block
+                    danger
+                    icon={<LogOut size={16} />}
+                    onClick={logout}
+                    className="!justify-start"
+                  >
                     Đăng xuất
                   </Button>
                 </div>

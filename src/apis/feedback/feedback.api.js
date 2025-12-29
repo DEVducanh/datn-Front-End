@@ -1,25 +1,16 @@
-// Nội dung file: src/apis/feedback/feedback.api.js (Frontend)
 import http from '@/apis/http'
 
 const feedbackAPI = {
-  // GET /feedback (Lấy tất cả feedback)
-  getAll: (params) => http.get('/feedback', { params }),
+  // 1. Gửi đánh giá mới (POST /feedback)
+  getAll: () => http.get('/feedback'),
+  create: (payload) => http.post('/feedback', payload),
 
-  // GET /feedback/:id (Lấy chi tiết 1 feedback)
-  getOne: (id) => http.get(`/feedback/${id}`),
+  // 2. Lấy đánh giá theo món ăn (GET /feedback/dish/:dishId)
+  // LƯU Ý: Bạn cần chắc chắn Backend đã có route này.
+  // Nếu Backend chưa có, bạn phải vào FeedbackController viết thêm hàm getByDish.
+  getByDish: (dishId) => http.get(`/feedback/dish/${dishId}`),
 
-  // PATCH /feedback/:id/status (Cập nhật trạng thái)
-  updateStatus: (id, statusPayload) => http.patch(`/feedback/${id}/status`, statusPayload),
-
-  // DELETE /feedback/:id (Xóa feedback)
-  delete: (id) => http.delete(`/feedback/${id}`),
-
-  // POST /feedback/:feedback_id/response (Admin phản hồi)
-  createResponse: (feedbackId, responsePayload) =>
-    http.post(`/feedback/${feedbackId}/response`, responsePayload),
-
-  // GET /feedback/:feedback_id/responses (Lấy các phản hồi của 1 feedback)
-  getResponses: (feedbackId) => http.get(`/feedback/${feedbackId}/responses`),
+  // ... các hàm cũ khác (getAll, delete...) cứ giữ nguyên
 }
 
 export default feedbackAPI

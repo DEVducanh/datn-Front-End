@@ -4,7 +4,7 @@ import Categories from '@/layouts/DefaultLayout/components/Categories'
 import Features from '@/layouts/DefaultLayout/components/Features'
 import Hero from '@/layouts/DefaultLayout/components/Hero'
 import Products from '@/layouts/DefaultLayout/components/Products'
-import { Spin } from 'antd'
+import http from '@/apis/http'
 
 const Home = () => {
   const location = useLocation()
@@ -13,37 +13,51 @@ const Home = () => {
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search)
 
-    // 1. Lấy mã bàn (Ưu tiên URL, sau đó là Storage)
+    // 1. Lấy mã bàn
     const urlTableId = searchParams.get('table_id')
     const storedTableId = localStorage.getItem('currentTableId')
     const activeTableId = urlTableId || storedTableId
 
-    // 2. Lấy thông tin xác thực
-    let token = localStorage.getItem('access_token') || localStorage.getItem('userToken') || localStorage.getItem('token')
-    const userInfo = localStorage.getItem('user_info')
+    // 2. LẤY THÔNG TIN XÁC THỰC (ĐÃ BỔ SUNG KEY 'userToken')
+    let token =
+      localStorage.getItem('userToken') ||      // <--- ĐÂY LÀ CÁI BẠN ĐANG DÙNG
+      localStorage.getItem('accessToken') ||
+      localStorage.getItem('access_token') ||
+      localStorage.getItem('token')
+
+    // Lấy thông tin User
+    const userInfo =
+      localStorage.getItem('user') ||           // <--- Key chứa thông tin user
+      localStorage.getItem('user_info')
 
     // Xử lý token rác
-    if (token === 'null' || token === 'undefined') token = null;
+    if (token === 'null' || token === 'undefined') token = null
 
     // --- LOGIC KIỂM TRA ---
     if (activeTableId) {
-      // Cập nhật lại kho nếu có ID mới từ URL
       if (urlTableId) {
         localStorage.setItem('currentTableId', urlTableId)
       }
 
-      // KIỂM TRA: Nếu thiếu Token HOẶC thiếu UserInfo -> ĐÁ VỀ TRANG NHẬP TÊN
+      // NẾU THIẾU TOKEN HOẶC USER -> MỚI ĐÁ VỀ GUEST LOGIN
       if (!token || !userInfo || userInfo === 'undefined') {
-        console.log("🚫 Chưa đăng nhập đủ -> Chuyển hướng CỨNG sang GuestLogin...")
-
-        // SỬA QUAN TRỌNG: Dùng window.location.href để ép chuyển trang
+        // console.log('Không tìm thấy userToken -> Về GuestLogin')
         window.location.href = `/guest-login?table_id=${activeTableId}`
-        return; // Dừng luôn code ở đây
-      }
-      else {
-        console.log("✅ Đã đầy đủ thông tin -> Cho phép ở lại")
+        return
+      } else {
+        // console.log('Đã có userToken -> Check-in bàn')
 
-        // Nếu trên URL vẫn còn ?table_id thì xóa đi cho đẹp (Dùng navigate replace là được)
+        // Gọi API cập nhật trạng thái bàn
+        const handleCheckIn = async () => {
+          try {
+            await http.patch(`/tables/${activeTableId}`, { status: 'occupied' })
+          } catch (error) {
+            console.error('Lỗi check-in bàn:', error)
+          }
+        }
+        handleCheckIn()
+
+        // Xóa table_id trên URL cho đẹp
         if (urlTableId) {
           searchParams.delete('table_id')
           navigate(

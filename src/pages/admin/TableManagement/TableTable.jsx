@@ -31,8 +31,8 @@ const TableTable = ({ data, loading, onEdit, onRemove, deletingId, onViewOrder }
           // --- KIỂM TRA DỮ LIỆU ---
           // Nếu record._id bị undefined => QR sẽ bị lỗi
           if (!record._id) {
-            console.error("LỖI: Bàn này thiếu _id:", record);
-            return <Tag color="red">Lỗi ID</Tag>;
+            console.error('LỖI: Bàn này thiếu _id:', record)
+            return <Tag color="red">Lỗi ID</Tag>
           }
 
           return <AppQRCode tableId={record._id} tableName={record.table_name} />

@@ -25,30 +25,30 @@ const UserTable = ({ data, loading, onEdit, onRemove, deletingId }) => {
           return <Tag color={info.color}>{info.text}</Tag>
         },
       },
-      {
-        title: 'Thao tác',
-        key: 'action',
-        width: 120,
-        align: 'center',
-        render: (_, record) => (
-          <div className="flex items-center gap-2">
-            <AntButton title="Chỉnh sửa" icon={<EditOutlined />} onClick={() => onEdit(record)} />
-            <Popconfirm
-              title="Bạn có chắc chắn muốn xoá danh mục này?"
-              onConfirm={() => onRemove(record._id)}
-              okText="Có"
-              cancelText="Không"
-            >
-              <AntButton
-                title="Xoá"
-                icon={<DeleteOutlined />}
-                danger
-                loading={deletingId === record._id}
-              />
-            </Popconfirm>
-          </div>
-        ),
-      },
+      // {
+      //   title: 'Thao tác',
+      //   key: 'action',
+      //   width: 120,
+      //   align: 'center',
+      //   render: (_, record) => (
+      //     <div className="flex items-center gap-2">
+      //       {/* <AntButton title="Chỉnh sửa" icon={<EditOutlined />} onClick={() => onEdit(record)} />
+      //       <Popconfirm
+      //         title="Bạn có chắc chắn muốn xoá danh mục này?"
+      //         onConfirm={() => onRemove(record._id)}
+      //         okText="Có"
+      //         cancelText="Không"
+      //       >
+      //         <AntButton
+      //           title="Xoá"
+      //           icon={<DeleteOutlined />}
+      //           danger
+      //           loading={deletingId === record._id}
+      //         />
+      //       </Popconfirm> */}
+      //     </div>
+      //   ),
+      // },
     ],
     [onEdit, onRemove]
   )

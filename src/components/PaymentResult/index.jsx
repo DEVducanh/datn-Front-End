@@ -92,7 +92,7 @@ const PaymentResult = () => {
   }, [])
 
   const handleGoHome = () => {
-    navigate('/flareon')
+    navigate('/flareon/orders')
   }
 
   return (
@@ -125,7 +125,7 @@ const PaymentResult = () => {
         }
         extra={[
           <Button type="primary" key="home" onClick={handleGoHome} size="large">
-            Quay về trang chủ
+            Quay về đơn hàng
           </Button>,
         ]}
         style={{

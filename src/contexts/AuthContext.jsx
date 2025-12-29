@@ -30,29 +30,29 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(getStoredUser)
   const [isLoggedIn, setIsLoggedIn] = useState(!!getStoredToken())
 
-  // --- SỬA HÀM LOGIN: LƯU THỜI GIAN BẮT ĐẦU PHIÊN ---
   const login = (token, userData, isRealUser = false) => {
+    // 1. LƯU THÔNG TIN ĐĂNG NHẬP
     if (isRealUser) {
-      // 1. ĐĂNG NHẬP TÀI KHOẢN THẬT (Admin/Member)
       localStorage.setItem('userToken', token)
       localStorage.setItem('user', JSON.stringify(userData))
 
-      // Xóa chế độ Guest
+      // Xóa data guest cũ để tránh lẫn lộn
       localStorage.removeItem('access_token')
       localStorage.removeItem('user_info')
-
-      // QUAN TRỌNG: Xóa mốc thời gian session để xem được toàn bộ lịch sử
-      localStorage.removeItem('sessionStartTime')
+      localStorage.removeItem('guest_info')
     } else {
-      // 2. ĐĂNG NHẬP KHÁCH VÃNG LAI (Guest)
       localStorage.setItem('access_token', token)
       localStorage.setItem('user_info', JSON.stringify(userData))
+      localStorage.setItem('guest_info', JSON.stringify(userData))
+    }
 
-      // QUAN TRỌNG: Lưu lại thời điểm bắt đầu ngồi vào bàn
-      // Để sau này chỉ hiện hóa đơn từ thời điểm này trở đi
-      if (!localStorage.getItem('sessionStartTime')) {
-        localStorage.setItem('sessionStartTime', Date.now().toString())
-      }
+    // 2. QUAN TRỌNG: LUÔN TẠO MỐC THỜI GIAN (SESSION START)
+    // Nếu chưa có mốc thời gian (người mới vào), thì tạo mốc BÂY GIỜ.
+    // Nếu đã có (vừa F5 lại trang), thì GIỮ NGUYÊN để không mất đơn vừa gọi.
+    if (!localStorage.getItem('sessionStartTime')) {
+      const now = Date.now().toString()
+      console.log('LOGIN: Tạo session mới tại:', new Date(parseInt(now)).toLocaleTimeString())
+      localStorage.setItem('sessionStartTime', now)
     }
 
     setUser(userData)
@@ -60,18 +60,23 @@ export const AuthProvider = ({ children }) => {
   }
 
   const logout = async () => {
-    console.log('ĐANG ĐĂNG XUẤT & TRẢ BÀN...')
-    const currentTableId = localStorage.getItem('currentTableId');
+    console.log('LOGOUT: Đang xóa session...')
+    const currentTableId = localStorage.getItem('currentTableId')
 
     if (currentTableId) {
       try {
-        await http.patch(`/tables/${currentTableId}`, { status: 'Available' });
+        await http.patch(`/tables/${currentTableId}`, { status: 'Available' })
       } catch (error) {
-        console.error("Lỗi khi trả bàn:", error);
+        console.error('Lỗi trả bàn:', error)
       }
     }
 
+    // XÓA SẠCH MỌI THỨ
     localStorage.clear()
+
+    // Đảm bảo xóa luôn sessionStartTime
+    localStorage.removeItem('sessionStartTime')
+
     setIsLoggedIn(false)
     setUser(null)
     window.location.href = '/flareon/login'

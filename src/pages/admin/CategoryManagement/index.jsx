@@ -3,7 +3,7 @@ import { toast } from 'react-toastify'
 import { Card, Breadcrumb, Form } from 'antd'
 import { PlusCircleOutlined } from '@ant-design/icons'
 import AntButton from '@/components/AntButton'
-import categoryAPI from '@/apis/category/category.api'
+import categoryAPI from '@/apis/category/category.api' // API bạn vừa cung cấp
 import CategoryTable from './CategoryTable'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import CategoryFormModal from './CategoryFormModal'
@@ -26,7 +26,8 @@ const CategoryManagement = () => {
     queryKey: categoryKeys.list(),
     queryFn: async () => {
       const res = await categoryAPI.getAll()
-      return res.data || []
+      // Xử lý trường hợp data trả về có thể bọc trong .data hoặc trả về trực tiếp
+      return res.data?.data || res.data || res || []
     },
     onError: () => toast.error('Không thể tải danh mục, vui lòng thử lại!'),
   })
@@ -45,37 +46,37 @@ const CategoryManagement = () => {
   // UPDATE
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }) => categoryAPI.update(id, payload),
-    onSuccess: async () => {
-      toast.success('Cập nhật danh mục thành công!')
-      await queryClient.invalidateQueries({ queryKey: categoryKeys.list() })
+    onSuccess: () => {
+      toast.success('Cập nhật thành công!')
+      queryClient.invalidateQueries({ queryKey: categoryKeys.list() })
       closeModal()
     },
-    onError: () => toast.error('Cập nhật danh mục thất bại!'),
+    onError: () => toast.error('Cập nhật thất bại!'),
   })
 
   // DELETE
   const deleteMutation = useMutation({
     mutationFn: (id) => categoryAPI.delete(id),
-    onMutate: async (id) => {
-      await queryClient.cancelQueries({ queryKey: categoryKeys.list() })
-      const previous = queryClient.getQueryData(categoryKeys.list())
-      queryClient.setQueryData(categoryKeys.list(), (old) =>
-        Array.isArray(old) ? old.filter((x) => x._id !== id) : old
-      )
-      return { previous }
-    },
-    onError: (_e, _id, ctx) => {
-      queryClient.setQueryData(categoryKeys.list(), ctx?.previous)
-      toast.error('Xoá danh mục thất bại!')
-    },
     onSuccess: () => {
       toast.success('Xoá danh mục thành công!')
-    },
-    onSettled: () => {
-      setDeletingId(null)
       queryClient.invalidateQueries({ queryKey: categoryKeys.list() })
     },
+    onError: () => toast.error('Xoá danh mục thất bại!'),
   })
+
+  // --- HÀM XỬ LÝ SWITCH TRẠNG THÁI (MỚI THÊM) ---
+  const handleToggleStatus = (record, checked) => {
+    const newStatus = checked ? 1 : 0 // 1: Hiện, 0: Ẩn
+
+    // Gọi mutation update nhưng không đóng modal hay làm gì khác
+    updateMutation.mutate({
+      id: record._id,
+      payload: {
+        ...record, // Giữ nguyên các trường khác
+        status: newStatus,
+      },
+    })
+  }
 
   const openCreate = () => {
     setEditingRow(null)
@@ -114,12 +115,8 @@ const CategoryManagement = () => {
   const handleOk = async () => {
     try {
       const values = await form.validateFields()
-      const payload = {
-        category_name: values.category_name,
-        description: values.description,
-        imageUrl: values.imageUrl,
-        status: values.status,
-      }
+      const payload = { ...values }
+
       if (editingRow) {
         updateMutation.mutate({ id: editingRow._id, payload })
       } else {
@@ -150,6 +147,7 @@ const CategoryManagement = () => {
           onEdit={openEdit}
           onRemove={handleRemove}
           deletingId={deletingId}
+          onToggleStatus={handleToggleStatus} // <--- TRUYỀN HÀM MỚI VÀO ĐÂY
         />
       </Card>
 
